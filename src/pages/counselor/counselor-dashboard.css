@@ -1,0 +1,154 @@
+.page-description {
+  font-size: 16px;
+  color: var(--subtext);
+  margin-bottom: 25px;
+}
+
+.empty-box {
+  text-align: center;
+  padding: 40px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--subtext);
+}
+
+/* 카드 그리드 */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+/* 상담 카드 */
+.room-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  padding: 20px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: 0.2s;
+  box-shadow: 0 3px 10px var(--shadow);
+}
+.room-card {
+  position: relative;
+}
+
+.room-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--primary);
+  box-shadow: 0 6px 14px var(--shadow);
+}
+
+.room-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.room-code {
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--primary);
+}
+
+.room-status {
+  margin: 10px 0;
+}
+
+/* 상태 뱃지 */
+.badge {
+  padding: 4px 10px;
+  font-size: 13px;
+  border-radius: 6px;
+}
+
+.badge-blue {
+  background: var(--primary);
+  color: white;
+}
+
+.badge-gray {
+  background: gray;
+  color: white;
+}
+
+.room-text {
+  color: var(--text);
+  margin: 6px 0;
+  font-size: 15px;
+}
+
+.room-time {
+  font-size: 13px;
+  color: var(--subtext);
+  margin-top: 10px;
+}
+.unread-badge {
+  background: #ef4444;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  line-height: 1;
+}
+
+.has-unread {
+  border: 1px solid rgba(59, 130, 246, 0.6);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
+}
+
+.new-msg {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #60a5fa;
+}
+.room-last-msg {
+  font-size: 13px;
+  color: #555;
+  margin-top: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.has-unread .room-last-msg {
+  font-weight: 700;
+  color: #111;
+}
+
+.close-btn {
+  margin-top: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.close-btn:hover {
+  background: #dc2626;
+}
+
+.room-card.closed {
+  opacity: 0.65;
+}
+
+.room-card.closed .close-btn {
+  display: none;
+}
+.floating-unread {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #ef4444;
+  color: white;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}

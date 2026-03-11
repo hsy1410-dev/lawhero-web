@@ -1,0 +1,79 @@
+/* -----------------------------
+   Sidebar 기본 스타일
+------------------------------ */
+.sidebar {
+  width: 230px;
+  height: 100vh;
+
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 999;
+
+  background: var(--card-bg);
+  border-right: 1px solid var(--border);
+
+  padding: 30px 20px;
+  box-sizing: border-box; /* 🎯 패딩 포함하여 width = 230px 유지 */
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  box-shadow: 2px 0 10px var(--shadow);
+}
+
+
+/* -----------------------------
+   기본 메뉴 스타일
+------------------------------ */
+.sidebar a {
+  font-size: 16px;
+  padding: 12px;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 8px;
+  transition: 0.15s;
+}
+
+/* Hover 효과 — 은은한 보라(Accent 기반) */
+.sidebar a:hover {
+  background: rgba(129, 140, 248, 0.12); /* accent-light */
+}
+
+/* -----------------------------
+   ▶ ACTIVE 메뉴 (라이트 모드)
+------------------------------ */
+.sidebar a.active {
+  background: #E0E7FF;  /* 연한 퍼플 */
+  color: #3730A3;       /* 짙은 퍼플 텍스트 */
+  font-weight: 700;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.10);
+}
+
+/* -----------------------------
+   ▶ ACTIVE 메뉴 (다크 모드)
+------------------------------ */
+[data-theme="dark"] .sidebar a.active {
+  background: #4338CA; /* 진한 퍼플 */
+  color: white;        /* 밝은 글씨로 대비 */
+  font-weight: 700;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.30);
+}
+/* 로그아웃 버튼 */
+.logout-btn {
+  margin-top: auto; /* 맨 아래로 밀기 */
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: 0.2s;
+  text-align: left;
+}
+
+.logout-btn:hover {
+  background: var(--accent-hover);
+}

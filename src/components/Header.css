@@ -1,0 +1,28 @@
+/* 공통 스타일 */
+.app-header {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+
+  /* ⭐ 테마 연동 */
+  background: var(--bg);
+  color: var(--text);
+
+  /* 부드럽게 전환 */
+  transition: background 0.25s ease, color 0.25s ease;
+
+  border-bottom: 1px solid var(--border);
+}
+
+.header-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}

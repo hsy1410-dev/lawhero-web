@@ -1,0 +1,37 @@
+/* ---- 공지 카드 ---- */
+.notice-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 16px var(--shadow);
+}
+
+/* ---- 공지 입력 ---- */
+.notice-textarea {
+  width: 100%;
+  resize: none;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.notice-textarea::placeholder {
+  color: var(--subtext);
+}
+
+.notice-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ---- 버튼 영역 ---- */
+.notice-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>law hero web</title>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script>
+      (function () {
+        const params = new URLSearchParams(window.location.search);
+        const uid = params.get("uid");
+
+        // uid가 있으면 KMC 시작
+        if (uid) {
+          fetch(
+            "https://us-central1-newdb-d95cd.cloudfunctions.net/kmcStart?uid=" + uid
+          )
+            .then((res) => res.text())
+            .then((html) => {
+              // Firebase가 반환한 HTML(form 자동 submit)을 그대로 출력
+              document.open();
+              document.write(html);
+              document.close();
+            })
+            .catch((err) => {
+              console.error("KMC 시작 실패:", err);
+              document.body.innerHTML = "<h2>본인인증 시작 실패</h2>";
+            });
+        }
+      })();
+    </script>
+
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

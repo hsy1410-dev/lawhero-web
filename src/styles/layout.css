@@ -1,0 +1,31 @@
+/* 전체 래퍼 */
+.layout-wrapper {
+  display: flex;
+  width: 100%;
+}
+
+/* 📌 사이드바 고정 */
+.sidebar {
+  width: 230px !important;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  z-index: 999;
+}
+
+/* 📌 메인 콘텐츠 전체 */
+.content-wrapper {
+  margin-left: 230px !important; /* 절대 덮어쓰기됨 */
+  width: calc(100% - 230px);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* 📌 안쪽 패딩 있는 페이지 영역 */
+.page-container {
+  padding: 30px;
+  flex: 1;
+}

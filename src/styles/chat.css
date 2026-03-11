@@ -1,0 +1,580 @@
+/* ================================
+   CHAT ROOM LAYOUT
+=================================== */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 80px);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.chat-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 18px;
+  font-weight: 600;
+  background: var(--card-bg);
+}
+
+/* 메시지 영역 */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  scroll-behavior: smooth;
+}
+
+/* 날짜 구분선 */
+.chat-date {
+  text-align: center;
+  margin: 16px 0;
+  opacity: 0.7;
+  font-size: 14px;
+  color: var(--subtext);
+}
+
+/* ================================
+   BUBBLE WRAPPER (정렬 전용)
+=================================== */
+.chat-bubble-wrapper {
+  display: flex;
+  margin-bottom: 14px;
+}
+
+.chat-bubble-wrapper.mine {
+  justify-content: flex-end; /* 오른쪽 */
+}
+
+.chat-bubble-wrapper.other {
+  justify-content: flex-start; /* 왼쪽 */
+}
+
+/* ================================
+   BUBBLE DESIGN
+=================================== */
+.chat-bubble {
+  max-width: 65%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  position: relative;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap; /* 줄바꿈 유지 */
+}
+
+/* 내가 보낸 말풍선 - 파란색 */
+.chat-bubble.mine {
+  background: #3B82F6;
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+/* 상대 메시지 */
+.chat-bubble.other {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-bottom-left-radius: 4px;
+}
+
+/* 꼬리 */
+.chat-bubble.mine::after {
+  content: "";
+  position: absolute;
+  right: -6px;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-left: 6px solid #3B82F6;
+}
+
+.chat-bubble.other::after {
+  content: "";
+  position: absolute;
+  left: -6px;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-right: 6px solid var(--card-bg);
+}
+
+/* ================================
+   BUBBLE CONTENT
+=================================== */
+.bubble-text {
+  font-size: 16px;
+  margin-bottom: 6px;
+  white-space: pre-wrap;
+}
+
+/* URL 자동 링크 */
+.bubble-text a {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+/* 이모지 확대 */
+.bubble-text emoji,
+.bubble-text img,
+.bubble-text .emoji {
+  font-size: 28px;
+}
+
+/* 메시지 시간 */
+.bubble-time {
+  font-size: 11px;
+  opacity: 0.8;
+  text-align: right;
+  margin-top: 6px;
+}
+
+/* 읽지 않은 메시지 숫자 */
+.unread {
+  margin-left: 6px;
+  color: white !important;
+  font-weight: 800;
+  opacity: 1 !important;
+}
+
+/* 이미지 메시지 */
+.bubble-image {
+  width: 200px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  object-fit: cover;
+}
+
+/* ================================
+   INPUT BAR
+=================================== */
+.chat-input-bar {
+  display: flex;
+  gap: 10px;
+  padding: 14px;
+  border-top: 1px solid var(--border);
+  background: var(--card-bg);
+}
+
+/* textarea 입력창 */
+.chat-textarea {
+  flex: 1;
+  resize: none;
+  height: 50px;
+  max-height: 140px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.45;
+  overflow-y: auto;
+  transition: border 0.2s;
+}
+
+.chat-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* ================================
+   BUTTONS
+=================================== */
+.send-btn,
+.file-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 12px 14px;
+  font-size: 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: 0.15s background;
+}
+
+.send-btn:hover,
+.file-btn:hover {
+  background: var(--primary-hover);
+}
+
+/* 파일 업로드 버튼 */
+.file-btn {
+  font-size: 22px;
+  background: var(--accent);
+}
+
+.file-btn:hover {
+  background: var(--accent-hover);
+}
+
+.file-btn input {
+  display: none;
+}
+
+/* ================================
+   SCROLLBAR CUSTOM
+=================================== */
+.chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f5f7fa;
+}
+
+.chat-header {
+  padding: 14px 20px;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+  background: white;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-bubble-wrapper {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.chat-bubble-wrapper.mine {
+  justify-content: flex-end;
+}
+
+.chat-bubble-wrapper.other {
+  justify-content: flex-start;
+}
+
+.chat-bubble {
+  max-width: 70%;
+  padding: 12px 16px;
+  border-radius: 18px;
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.chat-bubble.mine {
+  background: #7c3aed;
+  color: white;
+  border-bottom-right-radius: 6px;
+}
+
+.chat-bubble.other {
+  background: white;
+  color: #111827;
+  border: 1px solid #e5e7eb;
+  border-bottom-left-radius: 6px;
+}
+
+/* 🔥 입력창 개선 */
+
+.chat-input-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+  background: white;
+  border-top: 1px solid #e5e7eb;
+}
+
+.chat-textarea {
+  flex: 1;                /* 🔥 전체 너비 사용 */
+  resize: none;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+  min-height: 44px;
+  max-height: 120px;
+  overflow-y: auto;
+  outline: none;
+}
+
+.chat-textarea:focus {
+  border-color: #7c3aed;
+}
+
+.send-btn {
+  width: 48px;
+  height: 44px;
+  border-radius: 12px;
+  border: none;
+  background: #7c3aed;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.send-btn:hover {
+  opacity: 0.85;
+}
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f6f7fb;
+}
+
+.chat-header {
+  padding: 14px;
+  background: #1e3a8a;
+  color: white;
+  font-weight: 600;
+  text-align: center;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-bubble {
+  max-width: 70%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  position: relative;
+  word-break: break-word;
+}
+
+.chat-bubble.mine {
+  align-self: flex-end;
+  background: #2563eb;
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-bubble.other {
+  align-self: flex-start;
+  background: white;
+  border-bottom-left-radius: 4px;
+}
+
+.bubble-meta {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 4px;
+  text-align: right;
+}
+
+.chat-input-bar {
+  display: flex;
+  padding: 12px;
+  background: white;
+  border-top: 1px solid #eee;
+}
+
+.chat-textarea {
+  flex: 1;
+  resize: none;
+  border: none;
+  padding: 10px;
+  font-size: 14px;
+}
+
+.send-btn {
+  margin-left: 8px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 0 16px;
+  border-radius: 12px;
+}
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f4f6fb;
+}
+
+.chat-header {
+  padding: 14px;
+  background: #1e3a8a;
+  color: white;
+  font-weight: 600;
+  text-align: center;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.date-divider {
+  text-align: center;
+  font-size: 12px;
+  color: #888;
+  margin: 12px 0;
+}
+
+.chat-bubble {
+  max-width: 70%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  word-break: break-word;
+  position: relative;
+}
+
+.chat-bubble.mine {
+  align-self: flex-end;
+  background: #2563eb;
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-bubble.other {
+  align-self: flex-start;
+  background: white;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+.bubble-meta {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 4px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.read-status {
+  font-size: 11px;
+}
+
+.chat-input-bar {
+  display: flex;
+  padding: 12px;
+  background: white;
+  border-top: 1px solid #eee;
+}
+
+.chat-textarea {
+  flex: 1;
+  resize: none;
+  border: none;
+  padding: 10px;
+  font-size: 14px;
+  outline: none;
+  background: #f1f5f9;
+  border-radius: 12px;
+}
+
+.send-btn {
+  margin-left: 8px;
+  background: #1e3a8a;
+  color: white;
+  border: none;
+  padding: 0 18px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.send-btn:hover {
+  background: #172554;
+}
+.chat-container.modern {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f8fafc;
+}
+
+.chat-header.modern {
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: white;
+}
+
+.status.waiting {
+  font-size: 12px;
+  color: #f59e0b;
+}
+
+.status.assigned {
+  font-size: 12px;
+  color: #10b981;
+}
+
+.chat-messages.modern {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.bubble-row.mine {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.bubble-row.other {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.chat-bubble.modern {
+  max-width: 65%;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.bubble-row.mine .chat-bubble {
+  background: #4f46e5;
+  color: white;
+}
+
+.chat-input-bar.modern {
+  display: flex;
+  padding: 14px;
+  background: white;
+  border-top: 1px solid #e5e7eb;
+}
+
+.send-btn.modern {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #d1d5db;
+  border: none;
+  margin-left: 10px;
+  cursor: pointer;
+}
+
+.send-btn.modern.active {
+  background: #4f46e5;
+  color: white;
+}
