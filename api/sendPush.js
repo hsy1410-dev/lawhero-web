@@ -158,7 +158,6 @@ export default async function handler(req, res) {
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-    // 프리플라이트 요청 처리
     if (req.method === "OPTIONS") {
       return res.status(200).end();
     }
@@ -173,12 +172,11 @@ export default async function handler(req, res) {
       counselorUid,
       consultId,
       message,
+      adminTarget,
     } = req.body;
 
     if (!type || !message) {
-      return res
-        .status(400)
-        .json({ error: "type & message required" });
+      return res.status(400).json({ error: "type & message required" });
     }
 
     let tokens = [];
@@ -207,9 +205,14 @@ export default async function handler(req, res) {
         break;
 
       case "consult": {
+        if (!adminTarget) {
+          return res.status(400).json({ error: "adminTarget required" });
+        }
+
         const adminUsers = await db
           .collection("users")
           .where("role", "==", "admin")
+          .where("adminType", "==", adminTarget)
           .get();
 
         for (const doc of adminUsers.docs) {
@@ -218,7 +221,10 @@ export default async function handler(req, res) {
           tokens.push(...userTokens);
         }
 
-        title = "📥 새 빠른 상담 요청";
+        title =
+          adminTarget === "special"
+            ? "📥 새 특수 상담 요청"
+            : "📥 새 일반 상담 요청";
         break;
       }
 
@@ -250,22 +256,27 @@ export default async function handler(req, res) {
     tokens = [...new Set(tokens)];
     const { expo, web } = splitTokens(tokens);
 
-    console.log(`📊 ${type} → Expo:${expo.length}, Web:${web.length}`);
+    console.log(
+      `📊 ${type}${adminTarget ? `(${adminTarget})` : ""} → Expo:${expo.length}, Web:${web.length}`
+    );
 
     if (type === "notice") {
       await sendExpoPush(expo, title, message, {
         type,
         consultId,
+        adminTarget,
       });
     } else {
       await sendExpoPush(expo, title, message, {
         type,
         consultId,
+        adminTarget,
       });
 
       await sendWebPush(web, title, message, {
         type,
         consultId,
+        adminTarget,
       });
     }
 
