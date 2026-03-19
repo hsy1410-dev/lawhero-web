@@ -141,6 +141,28 @@ async function removeDeadToken(token) {
 ======================================================= */
 export default async function handler(req, res) {
   try {
+    const allowedOrigins = [
+      "https://www.lawhero.kr",
+      "https://lawhero.kr",
+      "http://localhost:5173",
+      "http://localhost:3000",
+    ];
+
+    const origin = req.headers.origin;
+
+    if (allowedOrigins.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    }
+
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    // 프리플라이트 요청 처리
+    if (req.method === "OPTIONS") {
+      return res.status(200).end();
+    }
+
     if (req.method !== "POST") {
       return res.status(405).json({ error: "POST only" });
     }
@@ -166,24 +188,25 @@ export default async function handler(req, res) {
        🔥 TYPE 분기
     ======================================================= */
     switch (type) {
-
       case "chat":
-        if (!targetUid)
+        if (!targetUid) {
           return res.status(400).json({ error: "targetUid required" });
+        }
 
         tokens = await getTokensByUid(targetUid);
         title = "💬 새 메시지";
         break;
 
       case "assign":
-        if (!counselorUid)
+        if (!counselorUid) {
           return res.status(400).json({ error: "counselorUid required" });
+        }
 
         tokens = await getTokensByUid(counselorUid);
         title = "🧑‍⚖️ 상담 배정";
         break;
 
-      case "consult":
+      case "consult": {
         const adminUsers = await db
           .collection("users")
           .where("role", "==", "admin")
@@ -197,8 +220,9 @@ export default async function handler(req, res) {
 
         title = "📥 새 빠른 상담 요청";
         break;
+      }
 
-      case "notice":
+      case "notice": {
         const allUsers = await db.collection("fcmTokens").get();
 
         for (const doc of allUsers.docs) {
@@ -208,6 +232,7 @@ export default async function handler(req, res) {
 
         title = "📢 공지사항";
         break;
+      }
 
       default:
         return res.status(400).json({ error: "Unknown type" });
@@ -221,14 +246,12 @@ export default async function handler(req, res) {
       console.log("⚠️ 보낼 토큰 없음");
       return res.json({ success: true });
     }
-tokens = [...new Set(tokens)];
+
+    tokens = [...new Set(tokens)];
     const { expo, web } = splitTokens(tokens);
 
-    console.log(
-      `📊 ${type} → Expo:${expo.length}, Web:${web.length}`
-    );
+    console.log(`📊 ${type} → Expo:${expo.length}, Web:${web.length}`);
 
-    // 🔥 notice는 Expo만 발송
     if (type === "notice") {
       await sendExpoPush(expo, title, message, {
         type,
@@ -247,7 +270,6 @@ tokens = [...new Set(tokens)];
     }
 
     return res.json({ success: true });
-
   } catch (err) {
     console.error("🔥 sendPush ERROR:", err);
     return res.status(500).json({ error: err.toString() });
