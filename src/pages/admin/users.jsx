@@ -13,7 +13,7 @@ import { db } from "../../config/firebase";
 export default function AdminUsers({ role }) {
   const [staffUsers, setStaffUsers] = useState([]);
   const [appUsers, setAppUsers] = useState([]);
-  const [searchStaff, setSearchStaff] = useState("");
+  const [selectedStaffRole, setSelectedStaffRole] = useState("admin");
   const [searchApp, setSearchApp] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -49,17 +49,16 @@ export default function AdminUsers({ role }) {
   };
 
   /* =====================================================
-     🔥 관리자 / 상담사 / 전문가 검색
+     🔥 관리자 / 상담사 / 전문가 역할별 조회
   ===================================================== */
-  const searchStaffUsers = async () => {
-    if (!searchStaff.trim()) return;
-
+  const loadStaffUsersByRole = async (targetRole) => {
+    setSelectedStaffRole(targetRole);
     setLoading(true);
 
     try {
       const q = query(
         collection(db, "users"),
-        where("email", "==", searchStaff.trim())
+        where("role", "==", targetRole)
       );
 
       const snap = await getDocs(q);
@@ -129,24 +128,13 @@ export default function AdminUsers({ role }) {
     try {
       const updateData = { role: newRole };
 
-      // admin이 아니면 adminType 제거
       if (newRole !== "admin") {
         updateData.adminType = null;
       }
 
       await updateDoc(doc(db, "users", uid), updateData);
 
-      setStaffUsers((prev) =>
-        prev.map((u) =>
-          u.id === uid
-            ? {
-                ...u,
-                role: newRole,
-                adminType: newRole === "admin" ? u.adminType || "general" : "",
-              }
-            : u
-        )
-      );
+      setStaffUsers((prev) => prev.filter((u) => u.id !== uid));
 
       alert("권한이 변경되었습니다.");
     } catch (error) {
@@ -204,25 +192,72 @@ export default function AdminUsers({ role }) {
     }
   };
 
+  const roleLabelMap = {
+    admin: "관리자",
+    counselor: "상담사",
+    expert: "전문가",
+  };
+
   return (
     <div style={{ padding: 40 }}>
       <h1>👑 유저 관리</h1>
 
       {loading && <p>검색 중...</p>}
 
-      <h2>관리자 / 상담사 / 전문가 검색</h2>
+      <h2>관리자 / 상담사 / 전문가 조회</h2>
 
-      <input
-        type="text"
-        placeholder="이메일 정확히 입력"
-        value={searchStaff}
-        onChange={(e) => setSearchStaff(e.target.value)}
-        style={{ padding: 8, width: 300 }}
-      />
+      <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+        <button
+          onClick={() => loadStaffUsersByRole("admin")}
+          style={{
+            padding: "8px 14px",
+            borderRadius: 8,
+            border: "1px solid #ddd",
+            backgroundColor:
+              selectedStaffRole === "admin" ? "#111827" : "#fff",
+            color: selectedStaffRole === "admin" ? "#fff" : "#111",
+            cursor: "pointer",
+          }}
+        >
+          관리자
+        </button>
 
-      <button onClick={searchStaffUsers} style={{ marginLeft: 10 }}>
-        검색
-      </button>
+        <button
+          onClick={() => loadStaffUsersByRole("counselor")}
+          style={{
+            padding: "8px 14px",
+            borderRadius: 8,
+            border: "1px solid #ddd",
+            backgroundColor:
+              selectedStaffRole === "counselor" ? "#111827" : "#fff",
+            color: selectedStaffRole === "counselor" ? "#fff" : "#111",
+            cursor: "pointer",
+          }}
+        >
+          상담사
+        </button>
+
+        <button
+          onClick={() => loadStaffUsersByRole("expert")}
+          style={{
+            padding: "8px 14px",
+            borderRadius: 8,
+            border: "1px solid #ddd",
+            backgroundColor:
+              selectedStaffRole === "expert" ? "#111827" : "#fff",
+            color: selectedStaffRole === "expert" ? "#fff" : "#111",
+            cursor: "pointer",
+          }}
+        >
+          전문가
+        </button>
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <strong>
+          현재 보기: {roleLabelMap[selectedStaffRole]} ({staffUsers.length})
+        </strong>
+      </div>
 
       {staffUsers.map((u) => (
         <div
@@ -253,10 +288,10 @@ export default function AdminUsers({ role }) {
             style={{ marginTop: 10 }}
           >
             <option value="">선택</option>
-            <option value="user">user</option>
             <option value="admin">admin</option>
             <option value="counselor">counselor</option>
             <option value="expert">expert</option>
+            <option value="user">user</option>
           </select>
 
           {u.role === "admin" && (
