@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
   collection,
   getDocs,
@@ -53,28 +53,23 @@ export default function CommunityList() {
   const [subFilter, setSubFilter] = useState("all");
 
   const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageCursors, setPageCursors] = useState({});
   const [hasNextPage, setHasNextPage] = useState(false);
 
-  /* ===============================
-     탭 변경 시 초기화
-  =============================== */
-  useEffect(() => {
-    setSubFilter("all");
-    setCurrentPage(1);
-    setPageCursors({});
-  }, [mainTab]);
+  // 페이지별 마지막 문서 캐시
+  const pageCursorsRef = useRef({});
+  // 요청 순서 꼬임 방지
+  const requestIdRef = useRef(0);
 
   /* ===============================
-     필터 변경 시 페이지 초기화
+     현재 필터 조합 key
   =============================== */
-  useEffect(() => {
-    setCurrentPage(1);
-    setPageCursors({});
-  }, [subFilter]);
+  const queryKey = useMemo(() => {
+    return `${mainTab}__${subFilter}`;
+  }, [mainTab, subFilter]);
 
   /* ===============================
      날짜 포맷
@@ -94,16 +89,12 @@ export default function CommunityList() {
     const base = collection(db, "community_posts");
     let q = query(base, where("category", "==", mainTab));
 
-    /* 전문가 / 정보 탭 -> field 기준 */
     if (mainTab === "expert" || mainTab === "info") {
       if (subFilter !== "all") {
         q = query(q, where("field", "==", subFilter));
       }
       q = query(q, orderBy("createdAt", "desc"));
-    }
-
-    /* 경험 탭 */
-    else if (mainTab === "experience") {
+    } else if (mainTab === "experience") {
       if (subFilter === "popular") {
         q = query(
           q,
@@ -122,79 +113,142 @@ export default function CommunityList() {
   }, [mainTab, subFilter]);
 
   /* ===============================
-     특정 페이지 조회
+     특정 페이지 docs 조회
+     - 화면 상태 변경 없음
+  =============================== */
+  const getPageDocs = useCallback(
+    async (page) => {
+      let q = buildBaseQuery();
+
+      if (page > 1) {
+        const prevCursor = pageCursorsRef.current[page - 1];
+        if (!prevCursor) return null;
+        q = query(q, startAfter(prevCursor), limit(PAGE_SIZE + 1));
+      } else {
+        q = query(q, limit(PAGE_SIZE + 1));
+      }
+
+      const snap = await getDocs(q);
+      return snap.docs;
+    },
+    [buildBaseQuery]
+  );
+
+  /* ===============================
+     page 이전 커서 확보
+     - 화면 상태 변경 없음
+  =============================== */
+  const ensureCursorUntil = useCallback(
+    async (page) => {
+      if (page <= 1) return true;
+
+      for (let p = 1; p < page; p++) {
+        if (!pageCursorsRef.current[p]) {
+          const docs = await getPageDocs(p);
+          if (!docs) return false;
+
+          const visibleDocs = docs.slice(0, PAGE_SIZE);
+          if (visibleDocs.length === 0) return false;
+
+          pageCursorsRef.current[p] = visibleDocs[visibleDocs.length - 1];
+        }
+      }
+
+      return true;
+    },
+    [getPageDocs]
+  );
+
+  /* ===============================
+     실제 페이지 로드
+     - 기존 posts 유지
+     - 준비 끝난 뒤 한 번만 setPosts
   =============================== */
   const fetchPage = useCallback(
-    async (page) => {
+    async (page, options = {}) => {
+      const { isFilterChange = false } = options;
+      const requestId = ++requestIdRef.current;
+
+      if (isFilterChange && posts.length === 0) {
+        setInitialLoading(true);
+      } else {
+        setPageLoading(true);
+      }
+
       try {
-        setLoading(true);
+        const ok = await ensureCursorUntil(page);
+        if (!ok) {
+          if (requestId !== requestIdRef.current) return;
 
-        let q = buildBaseQuery();
-
-        if (page > 1) {
-          const prevCursor = pageCursors[page - 1];
-          if (!prevCursor) {
-            setLoading(false);
-            return;
-          }
-          q = query(q, startAfter(prevCursor), limit(PAGE_SIZE + 1));
-        } else {
-          q = query(q, limit(PAGE_SIZE + 1));
+          setPosts([]);
+          setHasNextPage(false);
+          return;
         }
 
-        const snap = await getDocs(q);
-        const docs = snap.docs;
+        const docs = await getPageDocs(page);
+        if (requestId !== requestIdRef.current) return;
+
+        if (!docs) {
+          setPosts([]);
+          setHasNextPage(false);
+          return;
+        }
 
         const visibleDocs = docs.slice(0, PAGE_SIZE);
         const nextExists = docs.length > PAGE_SIZE;
 
+        if (visibleDocs.length > 0) {
+          pageCursorsRef.current[page] = visibleDocs[visibleDocs.length - 1];
+        }
+
+        // 여기서만 화면 교체
         setPosts(
           visibleDocs.map((d) => ({
             id: d.id,
             ...d.data(),
           }))
         );
-
         setHasNextPage(nextExists);
-
-        if (visibleDocs.length > 0) {
-          setPageCursors((prev) => ({
-            ...prev,
-            [page]: visibleDocs[visibleDocs.length - 1],
-          }));
-        }
       } catch (error) {
+        if (requestId !== requestIdRef.current) return;
         console.error("커뮤니티 글 조회 실패:", error);
-        setPosts([]);
-        setHasNextPage(false);
       } finally {
-        setLoading(false);
+        if (requestId === requestIdRef.current) {
+          setInitialLoading(false);
+          setPageLoading(false);
+        }
       }
     },
-    [buildBaseQuery, pageCursors]
+    [ensureCursorUntil, getPageDocs, posts.length]
   );
 
   /* ===============================
-     현재 페이지 로드
+     탭/필터 바뀌면 커서 초기화 후 1페이지 로드
+     - 기존 화면은 유지한 채 새 데이터 준비
   =============================== */
   useEffect(() => {
+    pageCursorsRef.current = {};
+    setCurrentPage(1);
+    setHasNextPage(false);
+
+    fetchPage(1, { isFilterChange: true });
+  }, [queryKey, fetchPage]);
+
+  /* ===============================
+     페이지 변경
+     - 첫 페이지 초기 로드는 위 effect가 담당
+  =============================== */
+  useEffect(() => {
+    if (currentPage === 1) return;
     fetchPage(currentPage);
   }, [currentPage, fetchPage]);
 
   /* ===============================
      페이지 이동
   =============================== */
-  const handlePageClick = async (page) => {
+  const handlePageClick = (page) => {
     if (page < 1) return;
-
-    if (page > 1 && !pageCursors[page - 1]) {
-      for (let p = 1; p < page; p++) {
-        if (!pageCursors[p]) {
-          await fetchPage(p);
-        }
-      }
-    }
-
+    if (page === currentPage) return;
     setCurrentPage(page);
   };
 
@@ -208,6 +262,9 @@ export default function CommunityList() {
   if (hasNextPage) {
     visiblePageNumbers.push(currentPage + 1);
   }
+
+  const showEmpty = !initialLoading && posts.length === 0;
+  const showOverlayLoading = pageLoading && posts.length > 0;
 
   return (
     <MainLayout title="커뮤니티">
@@ -274,63 +331,69 @@ export default function CommunityList() {
         {mainTab === "expert" && <h2 className="case-title">상담 사례</h2>}
         {mainTab === "info" && <h2 className="case-title">법률 정보</h2>}
 
-        {/* 글 목록 */}
-        <div className="community-list">
-          {loading ? (
+        {/* 리스트 래퍼 */}
+        <div className="community-list-wrap">
+          {/* 첫 진입에만 비어있는 로딩 */}
+          {initialLoading && posts.length === 0 ? (
             <p className="empty">불러오는 중...</p>
-          ) : posts.length === 0 ? (
+          ) : showEmpty ? (
             <p className="empty">게시글이 없습니다.</p>
           ) : (
-            posts.map((post) => (
-              <div
-                key={post.id}
-                className={`community-card ${
-                  mainTab === "expert" || mainTab === "info" ? "expert" : ""
-                }`}
-                onClick={() => nav(`/community/${post.id}`)}
-              >
-                <div className="meta-top">
-                  <span className="nickname">{post.nickname || "유저명"}</span>
-                  <span className="date">{formatDate(post.createdAt)}</span>
+            <>
+              {showOverlayLoading && (
+                <div className="community-list-overlay">
+                  <div className="community-list-overlay-text">불러오는 중...</div>
                 </div>
+              )}
 
-                <h3>{post.title}</h3>
+              <div className="community-list">
+                {posts.map((post) => (
+                  <div
+                    key={post.id}
+                    className={`community-card ${
+                      mainTab === "expert" || mainTab === "info" ? "expert" : ""
+                    }`}
+                    onClick={() => nav(`/community/${post.id}`)}
+                  >
+                    <div className="meta-top">
+                      <span className="nickname">{post.nickname || "유저명"}</span>
+                      <span className="date">{formatDate(post.createdAt)}</span>
+                    </div>
 
-                <p className="preview">{post.content}</p>
+                    <h3>{post.title}</h3>
+                    <p className="preview">{post.content}</p>
 
-                {/* 태그 */}
-                {mainTab === "expert" || mainTab === "info" ? (
-                  <div className="tags">
-                    <span className="tag-main">{post.field}</span>
+                    {mainTab === "expert" || mainTab === "info" ? (
+                      <div className="tags">
+                        <span className="tag-main">{post.field}</span>
+                      </div>
+                    ) : (
+                      post.subCategory && <div className="tag">{post.subCategory}</div>
+                    )}
+
+                    <div className="meta-bottom">
+                      <span>
+                        <img src="/heart.png" alt="" />
+                        {post.likeCount || 0}
+                      </span>
+                      <span>
+                        <img src="/comment.png" alt="" />
+                        {post.commentCount || 0}
+                      </span>
+                    </div>
                   </div>
-                ) : (
-                  post.subCategory && (
-                    <div className="tag">{post.subCategory}</div>
-                  )
-                )}
-
-                {/* 좋아요 + 댓글 */}
-                <div className="meta-bottom">
-                  <span>
-                    <img src="/heart.png" alt="" />
-                    {post.likeCount || 0}
-                  </span>
-                  <span>
-                    <img src="/comment.png" alt="" />
-                    {post.commentCount || 0}
-                  </span>
-                </div>
+                ))}
               </div>
-            ))
+            </>
           )}
         </div>
 
         {/* 페이지네이션 */}
-        {!loading && posts.length > 0 && (
+        {!showEmpty && posts.length > 0 && (
           <div className="pagination">
             <button
               className="page-btn"
-              disabled={currentPage === 1}
+              disabled={currentPage === 1 || pageLoading}
               onClick={() => handlePageClick(currentPage - 1)}
             >
               이전
@@ -340,6 +403,7 @@ export default function CommunityList() {
               <button
                 key={pageNum}
                 className={`page-btn ${currentPage === pageNum ? "active" : ""}`}
+                disabled={pageLoading}
                 onClick={() => handlePageClick(pageNum)}
               >
                 {pageNum}
@@ -348,7 +412,7 @@ export default function CommunityList() {
 
             <button
               className="page-btn"
-              disabled={!hasNextPage}
+              disabled={!hasNextPage || pageLoading}
               onClick={() => handlePageClick(currentPage + 1)}
             >
               다음
