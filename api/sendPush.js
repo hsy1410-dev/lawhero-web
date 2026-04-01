@@ -15,6 +15,10 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 /* =======================================================
    🔥 UID 기준 토큰 조회
 ======================================================= */
@@ -53,6 +57,8 @@ async function sendExpoPush(tokens, title, body, data) {
     requested: tokens.length,
     success: 0,
     failed: 0,
+    ticketIds: [],
+    ticketTokenMap: {},
   };
 
   if (!tokens.length) return summary;
@@ -87,12 +93,69 @@ async function sendExpoPush(tokens, title, body, data) {
         }
       } else {
         summary.success += 1;
+        summary.ticketIds.push(result.id);
+        summary.ticketTokenMap[result.id] = token;
         console.log("✅ Expo push 성공:", result.id);
       }
 
     } catch (err) {
       summary.failed += 1;
       console.log("❌ Expo fetch 실패:", err);
+    }
+  }
+
+  return summary;
+}
+
+async function getExpoPushReceipts(ticketIds) {
+  if (!ticketIds.length) return {};
+
+  const res = await fetch("https://exp.host/--/api/v2/push/getReceipts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids: ticketIds }),
+  });
+
+  const json = await res.json();
+
+  if (!res.ok) {
+    throw new Error(
+      `Expo receipts 요청 실패: ${res.status} ${JSON.stringify(json)}`
+    );
+  }
+
+  return json?.data || {};
+}
+
+async function summarizeExpoReceipts(receipts, ticketTokenMap) {
+  const summary = {
+    requested: Object.keys(ticketTokenMap).length,
+    ok: 0,
+    failed: 0,
+    pending: 0,
+    errors: {},
+  };
+
+  for (const [ticketId, token] of Object.entries(ticketTokenMap)) {
+    const receipt = receipts[ticketId];
+
+    if (!receipt) {
+      summary.pending += 1;
+      continue;
+    }
+
+    if (receipt.status === "ok") {
+      summary.ok += 1;
+      continue;
+    }
+
+    summary.failed += 1;
+    const error =
+      receipt?.details?.error || receipt?.message || "UnknownError";
+    summary.errors[error] = (summary.errors[error] || 0) + 1;
+
+    if (error === "DeviceNotRegistered") {
+      await removeDeadToken(token);
     }
   }
 
@@ -201,6 +264,7 @@ export default async function handler(req, res) {
       consultId,
       message,
       adminTarget,
+      waitForReceipts,
     } = req.body;
 
     if (!type || !message) {
@@ -300,6 +364,24 @@ export default async function handler(req, res) {
       adminTarget,
     });
 
+    if (waitForReceipts && expoSummary.ticketIds.length) {
+      try {
+        await delay(3000);
+        const receipts = await getExpoPushReceipts(
+          expoSummary.ticketIds
+        );
+        expoSummary.receipts = await summarizeExpoReceipts(
+          receipts,
+          expoSummary.ticketTokenMap
+        );
+
+        console.log("📬 Expo receipts:", expoSummary.receipts);
+      } catch (receiptErr) {
+        expoSummary.receiptError = receiptErr.toString();
+        console.log("❌ Expo receipt 조회 실패:", receiptErr);
+      }
+    }
+
     const webSummary = await sendWebPush(web, title, message, {
       type,
       consultId,
@@ -312,7 +394,13 @@ export default async function handler(req, res) {
     return res.json({
       success,
       summary: {
-        expo: expoSummary,
+        expo: {
+          requested: expoSummary.requested,
+          success: expoSummary.success,
+          failed: expoSummary.failed,
+          receipts: expoSummary.receipts,
+          receiptError: expoSummary.receiptError,
+        },
         web: webSummary,
       },
     });
