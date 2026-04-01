@@ -27,12 +27,17 @@ export default function AdminNotice() {
 
       if (data.success) {
         const expoCount = data.summary?.expo?.success ?? 0;
-        alert(`📢 공지 푸시 발송 완료\n앱 성공: ${expoCount}건`);
+        const fcmCount = data.summary?.web?.success ?? 0;
+        alert(
+          `📢 공지 푸시 발송 완료\nExpo 성공: ${expoCount}건\nFCM 성공: ${fcmCount}건`
+        );
         setMessage("");
       } else {
+        const expoFailed = data.summary?.expo?.failed ?? 0;
+        const fcmFailed = data.summary?.web?.failed ?? 0;
         const reason =
           data.error ||
-          "앱 푸시 토큰이 없거나 Expo 발송에 실패했습니다.";
+          `Expo 실패: ${expoFailed}건 / FCM 실패: ${fcmFailed}건`;
         alert(`❌ 전송 실패\n${reason}`);
       }
     } catch (e) {
