@@ -26,6 +26,9 @@ export default function AdminNotice() {
       const data = await res.json();
       console.log("📢 notice result:", data);
 
+      const tokenTotal = data.summary?.tokens?.total ?? 0;
+      const tokenExpo = data.summary?.tokens?.expo ?? 0;
+      const tokenWeb = data.summary?.tokens?.web ?? 0;
       const expoAccepted = data.summary?.expo?.success ?? 0;
       const expoReceiptOk = data.summary?.expo?.receipts?.ok ?? null;
       const expoReceiptFailed =
@@ -42,9 +45,18 @@ export default function AdminNotice() {
         const fcmCount = data.summary?.web?.success ?? 0;
         const lines = [
           "📢 공지 푸시 발송 완료",
+          `저장된 토큰: 총 ${tokenTotal}건`,
+          `Expo 토큰: ${tokenExpo}건`,
+          `웹 FCM 토큰: ${tokenWeb}건`,
           `Expo 접수: ${expoAccepted}건`,
-          `FCM 성공: ${fcmCount}건`,
+          `웹 FCM 성공: ${fcmCount}건`,
         ];
+
+        if (tokenExpo === 0 && tokenWeb > 0) {
+          lines.push(
+            "현재 저장된 모바일 Expo 토큰이 없어 웹 FCM만 발송되었습니다."
+          );
+        }
 
         if (expoReceiptOk !== null) {
           lines.push(`Expo 전달 성공: ${expoReceiptOk}건`);
