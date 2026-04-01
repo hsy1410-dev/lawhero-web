@@ -19,6 +19,12 @@ const db = admin.firestore();
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+function maskToken(token) {
+  if (typeof token !== "string") return String(token || "");
+  if (token.length <= 18) return token;
+  return `${token.slice(0, 10)}...${token.slice(-8)}`;
+}
 /* =======================================================
    🔥 UID 기준 토큰 조회
 ======================================================= */
@@ -184,6 +190,7 @@ async function sendWebPush(tokens, title, body, data) {
     requested: tokens.length,
     success: 0,
     failed: 0,
+    errors: {},
   };
 
   if (!tokens.length) return summary;
@@ -209,7 +216,14 @@ async function sendWebPush(tokens, title, body, data) {
       summary.success += 1;
     } catch (err) {
       summary.failed += 1;
-      console.log("❌ Web push error:", err.code);
+      const errorCode = err?.code || "unknown";
+      summary.errors[errorCode] =
+        (summary.errors[errorCode] || 0) + 1;
+      console.log(
+        `❌ Web push error (${maskToken(token)}):`,
+        errorCode,
+        err?.message || ""
+      );
 
       if (
         err.code ===
@@ -220,6 +234,7 @@ async function sendWebPush(tokens, title, body, data) {
     }
   }
 
+  console.log("📬 Web push summary:", summary);
   return summary;
 }
 
@@ -405,6 +420,18 @@ export default async function handler(req, res) {
 
     const success =
       expoSummary.success + webSummary.success > 0;
+
+    console.log("📦 sendPush summary:", {
+      type,
+      adminTarget,
+      expo: {
+        requested: expoSummary.requested,
+        success: expoSummary.success,
+        failed: expoSummary.failed,
+      },
+      web: webSummary,
+      success,
+    });
 
     return res.json({
       success,
