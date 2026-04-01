@@ -31,7 +31,10 @@ async function getTokensByUid(uid) {
 function splitTokens(tokens) {
   return tokens.reduce(
     (acc, token) => {
-      if (token.startsWith("ExponentPushToken")) {
+      if (
+        typeof token === "string" &&
+        /^Expo(nent)?PushToken\[/.test(token)
+      ) {
         acc.expo.push(token);
       } else {
         acc.web.push(token);
@@ -262,25 +265,17 @@ export default async function handler(req, res) {
       `📊 ${type}${adminTarget ? `(${adminTarget})` : ""} → Expo:${expo.length}, Web:${web.length}`
     );
 
-    if (type === "notice") {
-      await sendExpoPush(expo, title, message, {
-        type,
-        consultId,
-        adminTarget,
-      });
-    } else {
-      await sendExpoPush(expo, title, message, {
-        type,
-        consultId,
-        adminTarget,
-      });
+    await sendExpoPush(expo, title, message, {
+      type,
+      consultId,
+      adminTarget,
+    });
 
-      await sendWebPush(web, title, message, {
-        type,
-        consultId,
-        adminTarget,
-      });
-    }
+    await sendWebPush(web, title, message, {
+      type,
+      consultId,
+      adminTarget,
+    });
 
     return res.json({ success: true });
   } catch (err) {
