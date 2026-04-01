@@ -26,7 +26,7 @@ async function getTokensByUid(uid) {
 }
 
 /* =======================================================
-   🔥 토큰 분리 (Expo / Web)
+   🔥 토큰 분리 (Expo / FCM)
 ======================================================= */
 function splitTokens(tokens) {
   return tokens.reduce(
@@ -99,7 +99,7 @@ async function sendExpoPush(tokens, title, body, data) {
   return summary;
 }
 /* =======================================================
-   💻 Web FCM Push
+   💻 FCM Push
 ======================================================= */
 async function sendWebPush(tokens, title, body, data) {
   const summary = {
@@ -283,7 +283,6 @@ export default async function handler(req, res) {
 
     tokens = [...new Set(tokens)];
     const { expo, web } = splitTokens(tokens);
-    const shouldSendWeb = type !== "notice";
 
     console.log(
       `📊 ${type}${adminTarget ? `(${adminTarget})` : ""} → Expo:${expo.length}, Web:${web.length}`
@@ -291,24 +290,8 @@ export default async function handler(req, res) {
 
     if (type === "notice" && web.length) {
       console.log(
-        `ℹ️ notice는 앱 전용 발송이라 Web ${web.length}건은 제외`
+        `ℹ️ notice는 Expo 외 FCM 토큰 ${web.length}건도 함께 발송`
       );
-    }
-
-    if (type === "notice" && expo.length === 0) {
-      return res.json({
-        success: false,
-        error: "등록된 앱(Expo) 푸시 토큰이 없습니다.",
-        summary: {
-          expo: { requested: 0, success: 0, failed: 0 },
-          web: {
-            requested: web.length,
-            success: 0,
-            failed: 0,
-            skipped: true,
-          },
-        },
-      });
     }
 
     const expoSummary = await sendExpoPush(expo, title, message, {
@@ -317,22 +300,14 @@ export default async function handler(req, res) {
       adminTarget,
     });
 
-    const webSummary = shouldSendWeb
-      ? await sendWebPush(web, title, message, {
-          type,
-          consultId,
-          adminTarget,
-        })
-      : {
-          requested: web.length,
-          success: 0,
-          failed: 0,
-          skipped: true,
-        };
+    const webSummary = await sendWebPush(web, title, message, {
+      type,
+      consultId,
+      adminTarget,
+    });
 
-    const success = shouldSendWeb
-      ? expoSummary.success + webSummary.success > 0
-      : expoSummary.success > 0;
+    const success =
+      expoSummary.success + webSummary.success > 0;
 
     return res.json({
       success,
