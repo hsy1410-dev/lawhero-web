@@ -23,11 +23,17 @@ export default function AdminNotice() {
       });
 
       const data = await res.json();
+      console.log("📢 notice result:", data);
+
       if (data.success) {
-        alert("📢 공지 푸시 발송 완료");
+        const expoCount = data.summary?.expo?.success ?? 0;
+        alert(`📢 공지 푸시 발송 완료\n앱 성공: ${expoCount}건`);
         setMessage("");
       } else {
-        alert("❌ 전송 실패");
+        const reason =
+          data.error ||
+          "앱 푸시 토큰이 없거나 Expo 발송에 실패했습니다.";
+        alert(`❌ 전송 실패\n${reason}`);
       }
     } catch (e) {
       console.error(e);
