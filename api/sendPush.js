@@ -382,6 +382,12 @@ export default async function handler(req, res) {
       `📊 ${type}${adminTarget ? `(${adminTarget})` : ""} → Expo:${expo.length}, Web:${web.length}`
     );
 
+    if (!expo.length && web.length) {
+      console.log(
+        "ℹ️ 현재 저장된 토큰은 웹 FCM 토큰만 있으며 Expo 토큰은 없습니다."
+      );
+    }
+
     if (type === "notice" && web.length) {
       console.log(
         `ℹ️ notice는 Expo 외 FCM 토큰 ${web.length}건도 함께 발송`
@@ -436,6 +442,11 @@ export default async function handler(req, res) {
     return res.json({
       success,
       summary: {
+        tokens: {
+          total: tokens.length,
+          expo: expo.length,
+          web: web.length,
+        },
         expo: {
           requested: expoSummary.requested,
           success: expoSummary.success,
