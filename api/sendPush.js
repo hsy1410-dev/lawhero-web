@@ -134,6 +134,7 @@ async function summarizeExpoReceipts(receipts, ticketTokenMap) {
     failed: 0,
     pending: 0,
     errors: {},
+    details: {},
   };
 
   for (const [ticketId, token] of Object.entries(ticketTokenMap)) {
@@ -153,6 +154,20 @@ async function summarizeExpoReceipts(receipts, ticketTokenMap) {
     const error =
       receipt?.details?.error || receipt?.message || "UnknownError";
     summary.errors[error] = (summary.errors[error] || 0) + 1;
+
+    let detailKey = error;
+
+    if (error === "DeveloperError") {
+      const fcmResponse = receipt?.details?.fcm?.response || "";
+
+      if (fcmResponse.includes("SENDER_ID_MISMATCH")) {
+        detailKey = "SenderIdMismatch";
+        await removeDeadToken(token);
+      }
+    }
+
+    summary.details[detailKey] =
+      (summary.details[detailKey] || 0) + 1;
 
     if (error === "DeviceNotRegistered") {
       await removeDeadToken(token);
