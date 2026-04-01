@@ -144,6 +144,8 @@ export default async function handler(req, res) {
     const allowedOrigins = [
       "https://www.lawhero.kr",
       "https://lawhero.kr",
+      "https://lawhero-web.vercel.app",
+      "https://lawheroweb.vercel.app",
       "http://localhost:5173",
       "http://localhost:3000",
     ];
