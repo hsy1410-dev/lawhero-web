@@ -49,7 +49,13 @@ function splitTokens(tokens) {
    📱 Expo Push
 ======================================================= */
 async function sendExpoPush(tokens, title, body, data) {
-  if (!tokens.length) return;
+  const summary = {
+    requested: tokens.length,
+    success: 0,
+    failed: 0,
+  };
+
+  if (!tokens.length) return summary;
 
   for (const token of tokens) {
     try {
@@ -70,26 +76,39 @@ async function sendExpoPush(tokens, title, body, data) {
       );
 
       const json = await res.json();
-
-      // 🔥 여기 수정
       const result = json?.data;
 
-      if (!result || result.status !== "ok") {
+      if (!res.ok || !result || result.status !== "ok") {
+        summary.failed += 1;
         console.log("❌ Expo error:", json);
+
+        if (result?.details?.error === "DeviceNotRegistered") {
+          await removeDeadToken(token);
+        }
       } else {
+        summary.success += 1;
         console.log("✅ Expo push 성공:", result.id);
       }
 
     } catch (err) {
+      summary.failed += 1;
       console.log("❌ Expo fetch 실패:", err);
     }
   }
+
+  return summary;
 }
 /* =======================================================
    💻 Web FCM Push
 ======================================================= */
 async function sendWebPush(tokens, title, body, data) {
-  if (!tokens.length) return;
+  const summary = {
+    requested: tokens.length,
+    success: 0,
+    failed: 0,
+  };
+
+  if (!tokens.length) return summary;
 
   for (const token of tokens) {
     try {
@@ -109,7 +128,9 @@ async function sendWebPush(tokens, title, body, data) {
           ])
         ),
       });
+      summary.success += 1;
     } catch (err) {
+      summary.failed += 1;
       console.log("❌ Web push error:", err.code);
 
       if (
@@ -120,6 +141,8 @@ async function sendWebPush(tokens, title, body, data) {
       }
     }
   }
+
+  return summary;
 }
 
 /* =======================================================
@@ -260,24 +283,64 @@ export default async function handler(req, res) {
 
     tokens = [...new Set(tokens)];
     const { expo, web } = splitTokens(tokens);
+    const shouldSendWeb = type !== "notice";
 
     console.log(
       `📊 ${type}${adminTarget ? `(${adminTarget})` : ""} → Expo:${expo.length}, Web:${web.length}`
     );
 
-    await sendExpoPush(expo, title, message, {
+    if (type === "notice" && web.length) {
+      console.log(
+        `ℹ️ notice는 앱 전용 발송이라 Web ${web.length}건은 제외`
+      );
+    }
+
+    if (type === "notice" && expo.length === 0) {
+      return res.json({
+        success: false,
+        error: "등록된 앱(Expo) 푸시 토큰이 없습니다.",
+        summary: {
+          expo: { requested: 0, success: 0, failed: 0 },
+          web: {
+            requested: web.length,
+            success: 0,
+            failed: 0,
+            skipped: true,
+          },
+        },
+      });
+    }
+
+    const expoSummary = await sendExpoPush(expo, title, message, {
       type,
       consultId,
       adminTarget,
     });
 
-    await sendWebPush(web, title, message, {
-      type,
-      consultId,
-      adminTarget,
-    });
+    const webSummary = shouldSendWeb
+      ? await sendWebPush(web, title, message, {
+          type,
+          consultId,
+          adminTarget,
+        })
+      : {
+          requested: web.length,
+          success: 0,
+          failed: 0,
+          skipped: true,
+        };
 
-    return res.json({ success: true });
+    const success = shouldSendWeb
+      ? expoSummary.success + webSummary.success > 0
+      : expoSummary.success > 0;
+
+    return res.json({
+      success,
+      summary: {
+        expo: expoSummary,
+        web: webSummary,
+      },
+    });
   } catch (err) {
     console.error("🔥 sendPush ERROR:", err);
     return res.status(500).json({ error: err.toString() });
