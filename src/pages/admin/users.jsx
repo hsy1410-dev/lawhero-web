@@ -56,19 +56,24 @@ export default function AdminUsers({ role }) {
     setLoading(true);
 
     try {
-      const q = query(
-        collection(db, "users"),
-        where("role", "==", targetRole)
-      );
+      const snap =
+        targetRole === "user"
+          ? await getDocs(collection(db, "users"))
+          : await getDocs(
+              query(
+                collection(db, "users"),
+                where("role", "==", targetRole)
+              )
+            );
 
-      const snap = await getDocs(q);
-
-      const results = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-        role: d.data().role || "user",
-        adminType: d.data().adminType || "",
-      }));
+      const results = snap.docs
+        .map((d) => ({
+          id: d.id,
+          ...d.data(),
+          role: d.data().role || "user",
+          adminType: d.data().adminType || "",
+        }))
+        .filter((user) => user.role === targetRole);
 
       setStaffUsers(results);
     } catch (error) {
@@ -196,7 +201,15 @@ export default function AdminUsers({ role }) {
     admin: "관리자",
     counselor: "상담사",
     expert: "전문가",
+    user: "유저",
   };
+
+  const staffRoleButtons = [
+    { value: "admin", label: "관리자" },
+    { value: "counselor", label: "상담사" },
+    { value: "expert", label: "전문가" },
+    { value: "user", label: "유저" },
+  ];
 
   return (
     <div style={{ padding: 40 }}>
@@ -204,53 +217,26 @@ export default function AdminUsers({ role }) {
 
       {loading && <p>검색 중...</p>}
 
-      <h2>관리자 / 상담사 / 전문가 조회</h2>
+      <h2>관리자 / 상담사 / 전문가 / 유저 조회</h2>
 
       <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-        <button
-          onClick={() => loadStaffUsersByRole("admin")}
-          style={{
-            padding: "8px 14px",
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            backgroundColor:
-              selectedStaffRole === "admin" ? "#111827" : "#fff",
-            color: selectedStaffRole === "admin" ? "#fff" : "#111",
-            cursor: "pointer",
-          }}
-        >
-          관리자
-        </button>
-
-        <button
-          onClick={() => loadStaffUsersByRole("counselor")}
-          style={{
-            padding: "8px 14px",
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            backgroundColor:
-              selectedStaffRole === "counselor" ? "#111827" : "#fff",
-            color: selectedStaffRole === "counselor" ? "#fff" : "#111",
-            cursor: "pointer",
-          }}
-        >
-          상담사
-        </button>
-
-        <button
-          onClick={() => loadStaffUsersByRole("expert")}
-          style={{
-            padding: "8px 14px",
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            backgroundColor:
-              selectedStaffRole === "expert" ? "#111827" : "#fff",
-            color: selectedStaffRole === "expert" ? "#fff" : "#111",
-            cursor: "pointer",
-          }}
-        >
-          전문가
-        </button>
+        {staffRoleButtons.map((roleOption) => (
+          <button
+            key={roleOption.value}
+            onClick={() => loadStaffUsersByRole(roleOption.value)}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid #ddd",
+              backgroundColor:
+                selectedStaffRole === roleOption.value ? "#111827" : "#fff",
+              color: selectedStaffRole === roleOption.value ? "#fff" : "#111",
+              cursor: "pointer",
+            }}
+          >
+            {roleOption.label}
+          </button>
+        ))}
       </div>
 
       <div style={{ marginTop: 20 }}>
