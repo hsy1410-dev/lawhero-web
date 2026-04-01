@@ -217,10 +217,10 @@ async function removeDeadToken(token) {
   for (const doc of snap.docs) {
     const tokens = doc.data().tokens || {};
     if (tokens[token]) {
-      await doc.ref.update({
-        [`tokens.${token}`]:
-          admin.firestore.FieldValue.delete(),
-      });
+      await doc.ref.update(
+        new admin.firestore.FieldPath("tokens", token),
+        admin.firestore.FieldValue.delete()
+      );
     }
   }
 }
