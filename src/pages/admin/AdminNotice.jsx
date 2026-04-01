@@ -13,17 +13,14 @@ export default function AdminNotice() {
 
     setLoading(true);
     try {
-      const res = await fetch(
-        "https://lawheroweb.vercel.app/api/sendPush",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "notice",
-            message,
-          }),
-        }
-      );
+      const res = await fetch("/api/sendPush", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "notice",
+          message,
+        }),
+      });
 
       const data = await res.json();
       if (data.success) {
