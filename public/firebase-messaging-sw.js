@@ -3,11 +3,11 @@ importScripts("https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"
 importScripts("https://www.gstatic.com/firebasejs/9.22.2/firebase-messaging-compat.js");
 
 firebase.initializeApp({
-  apiKey: "AIzaSyA7bvOCxqg_x9q__4vTrDIBo11sqrQ9pkU",
-  authDomain: "newdb-d95cd.firebaseapp.com",
-  projectId: "newdb-d95cd",
-  messagingSenderId: "94139987393",
-  appId: "1:94139987393:web:f32bf03fe0b96748efeb40",
+  apiKey: "AIzaSyDnN9tfki8ldnN28QjybseGONhC-PAyKu8",
+  authDomain: "lawheroapp.firebaseapp.com",
+  projectId: "lawheroapp",
+  messagingSenderId: "364669680330",
+  appId: "1:364669680330:web:15470fb61897f1fe43d233",
 });
 
 const messaging = firebase.messaging();
