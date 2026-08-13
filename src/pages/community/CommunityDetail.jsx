@@ -41,10 +41,7 @@ export default function CommunityDetail() {
   const [role, setRole] = useState("");
 
   useEffect(() => {
-    if (!user) {
-      setRole("");
-      return;
-    }
+    if (!user) return;
 
     getDoc(doc(db, "users", user.uid)).then((snap) => {
       if (snap.exists()) {

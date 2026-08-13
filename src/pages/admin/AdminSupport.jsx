@@ -10,6 +10,8 @@ import {
 } from "firebase/firestore";
 
 import { db } from "../../config/firebase";
+import MainLayout from "../../layouts/MainLayout";
+import "../../styles/adminShared.css";
 
 export default function AdminSupport() {
 
@@ -77,12 +79,8 @@ export default function AdminSupport() {
   };
 
   return (
-
-    <div style={{ padding: 30 }}>
-
-      <h2 style={{ marginBottom: 20 }}>
-        🛟 고객센터 문의
-      </h2>
+    <MainLayout title="고객센터 문의">
+    <div className="admin-mobile-page">
 
       {tickets.map((ticket) => (
 
@@ -222,6 +220,7 @@ export default function AdminSupport() {
       ))}
 
     </div>
+    </MainLayout>
 
   );
 }

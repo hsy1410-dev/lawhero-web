@@ -1,11 +1,21 @@
 // src/utils/sendPush.js
 
-export async function sendPush({ type, message, targetUid, consultId }) {
+export async function sendPush({
+  type,
+  message,
+  targetUid,
+  counselorUid,
+  consultId,
+  adminTarget,
+  waitForReceipts,
+}) {
   // ✅ 디버그 로그 (꼭 남겨!)
   console.log("📤 sendPush body:", {
     type,
     targetUid,
+    counselorUid,
     consultId,
+    adminTarget,
     message,
   });
 
@@ -16,8 +26,11 @@ export async function sendPush({ type, message, targetUid, consultId }) {
     },
     body: JSON.stringify({
       type,
-      targetUid, // ✅ chat은 이게 핵심
+      targetUid,
+      counselorUid,
       consultId,
+      adminTarget,
+      waitForReceipts,
       message,
     }),
   });

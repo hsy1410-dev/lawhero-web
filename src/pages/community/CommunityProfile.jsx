@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { auth, db } from "../../config/firebase";
+import { db } from "../../config/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 
 export default function CommunityProfile({ user }) {

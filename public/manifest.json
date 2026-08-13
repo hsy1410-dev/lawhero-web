@@ -1,3 +1,17 @@
 {
-  "gcm_sender_id": "103953800507"
+  "name": "Law Hero 관리자",
+  "short_name": "Law Hero",
+  "start_url": "/admin",
+  "display": "standalone",
+  "background_color": "#f5f6fa",
+  "theme_color": "#2563eb",
+  "gcm_sender_id": "364669680330",
+  "icons": [
+    {
+      "src": "/heart.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
 }

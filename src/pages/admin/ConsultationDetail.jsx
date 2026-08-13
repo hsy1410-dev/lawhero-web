@@ -15,6 +15,7 @@ import { db } from "../../config/firebase";
 import MainLayout from "../../layouts/MainLayout";
 import "../../styles/adminDetail.css";
 import { sendPush } from "../../utils/sendPush";
+import { getConsultationText } from "../../utils/consultation";
 
 export default function ConsultationDetail() {
   const { id } = useParams();
@@ -25,32 +26,32 @@ export default function ConsultationDetail() {
   const [selectedCounselor, setSelectedCounselor] =
     useState(null);
 
-  /* ===============================
-     상담 정보 로드
-  =============================== */
-  const loadConsult = async () => {
-    const snap = await getDoc(doc(db, "consult_requests", id));
-    if (snap.exists()) {
-      setData({ id: snap.id, ...snap.data() });
-    }
-  };
-
-  /* ===============================
-     상담사 목록 로드
-  =============================== */
-  const loadCounselors = async () => {
-    const snap = await getDocs(collection(db, "users"));
-    const list = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((x) => x.role === "counselor");
-
-    setCounselors(list);
-  };
-
   useEffect(() => {
-    loadConsult();
-    loadCounselors();
-  }, []);
+    let active = true;
+
+    Promise.all([
+      getDoc(doc(db, "consult_requests", id)),
+      getDocs(collection(db, "users")),
+    ]).then(([consultSnap, counselorSnap]) => {
+      if (!active) return;
+
+      if (consultSnap.exists()) {
+        setData({ id: consultSnap.id, ...consultSnap.data() });
+      }
+
+      setCounselors(
+        counselorSnap.docs
+          .map((counselorDoc) => ({ id: counselorDoc.id, ...counselorDoc.data() }))
+          .filter((counselor) => counselor.role === "counselor")
+      );
+    }).catch((error) => {
+      console.error("상담 상세 조회 실패:", error);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [id]);
 
   /* ===============================
      🔥 상담사 배정
@@ -71,6 +72,9 @@ export default function ConsultationDetail() {
           counselorId: selectedCounselor.id,
           users: [data.userId, selectedCounselor.id],
           requestId: id,
+          shortId: data.shortId ?? id.slice(0, 6).toUpperCase(),
+          category: data.category ?? "법률 상담",
+          status: "assigned",
           lastMessage: "",
           lastMessageAt: null,
           createdAt: serverTimestamp(),
@@ -136,6 +140,13 @@ export default function ConsultationDetail() {
           <p>
             <strong>상담 코드:</strong>{" "}
             {data.shortId ?? data.id.slice(0, 6).toUpperCase()}
+          </p>
+        </div>
+
+        <div className="info-box consultation-content-box">
+          <h2>고객이 남긴 상담 내용</h2>
+          <p className={getConsultationText(data) ? "consultation-content" : "consultation-content empty"}>
+            {getConsultationText(data) || "작성된 상담 내용이 없습니다."}
           </p>
         </div>
 

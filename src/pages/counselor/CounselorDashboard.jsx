@@ -67,8 +67,6 @@ const toggleAvailability = async () => {
   useEffect(() => {
     if (!counselorUid) return;
 
-    setLoading(true);
-
     const q = query(
       collection(db, "chat_rooms"),
       where("counselorId", "==", counselorUid)

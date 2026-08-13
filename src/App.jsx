@@ -168,14 +168,6 @@ useEffect(() => {
 
       <BrowserRouter>
 
-        {user && (
-          <header className="top-header">
-            <h2 className="top-header-title">
-              law hero web
-            </h2>
-          </header>
-        )}
-
         <Routes>
   {/* Auth */}
   <Route path="/" element={<Login />} />

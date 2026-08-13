@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./AdminNotice.css";
+import MainLayout from "../../layouts/MainLayout";
 
 export default function AdminNotice() {
   const [message, setMessage] = useState("");
@@ -90,6 +91,7 @@ export default function AdminNotice() {
   };
 
   return (
+    <MainLayout title="공지사항">
     <div className="admin-page">
       {/* ---- 상단 요약 카드 ---- */}
       <div className="admin-cards">
@@ -124,5 +126,6 @@ export default function AdminNotice() {
         </div>
       </div>
     </div>
+    </MainLayout>
   );
 }

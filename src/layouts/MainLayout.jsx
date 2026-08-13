@@ -7,6 +7,7 @@ import "../styles/layout.css";
 
 export default function MainLayout({ children, title }) {
   const [role, setRole] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -42,10 +43,23 @@ export default function MainLayout({ children, title }) {
 
   return (
     <div className="layout-wrapper">
-      <Sidebar role={role} />
+      <Sidebar role={role} isOpen={menuOpen} onClose={() => setMenuOpen(false)} />
+
+      {menuOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="메뉴 닫기"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
 
       <div className="content-wrapper">
-        <Header title={title} />
+        <Header
+          title={title}
+          role={role}
+          onMenuToggle={() => setMenuOpen((open) => !open)}
+        />
 
         <div className="page-container">{children}</div>
       </div>

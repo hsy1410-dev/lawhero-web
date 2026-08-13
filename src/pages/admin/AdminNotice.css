@@ -18,6 +18,7 @@
   color: var(--text);
   font-size: 15px;
   line-height: 1.5;
+  box-sizing: border-box;
 }
 
 .notice-textarea::placeholder {
@@ -34,4 +35,15 @@
   display: flex;
   justify-content: flex-end;
   margin-top: 14px;
+}
+
+@media (max-width: 820px) {
+  .notice-card {
+    padding: 15px;
+  }
+
+  .notice-actions .table-btn {
+    width: 100%;
+    min-height: 46px;
+  }
 }

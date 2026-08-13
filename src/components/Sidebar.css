@@ -21,6 +21,8 @@
   gap: 16px;
 
   box-shadow: 2px 0 10px var(--shadow);
+  transition: transform 0.2s ease;
+  overflow-y: auto;
 }
 
 
@@ -76,4 +78,22 @@
 
 .logout-btn:hover {
   background: var(--accent-hover);
+}
+
+@media (max-width: 820px) {
+  .sidebar {
+    width: min(82vw, 300px) !important;
+    transform: translateX(-105%);
+    padding: 24px 18px;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar a,
+  .logout-btn {
+    min-height: 44px;
+    box-sizing: border-box;
+  }
 }

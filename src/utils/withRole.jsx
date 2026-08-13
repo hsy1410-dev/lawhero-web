@@ -21,7 +21,7 @@ export function withRole(Component, requiredRoles) {
       if (!allowed) {
         navigate("/403");
       }
-    }, [user, role]);
+    }, [user, role, navigate]);
 
     if (!user || !role) {
       return <div>Loading...</div>;

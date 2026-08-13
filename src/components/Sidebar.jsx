@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { auth } from "../config/firebase";
 import "./Sidebar.css";
 
-export default function Sidebar({ role }) {
+export default function Sidebar({ role, isOpen = false, onClose = () => {} }) {
   const location = useLocation();
   const nav = useNavigate();
   const path = location.pathname;
@@ -15,7 +15,7 @@ export default function Sidebar({ role }) {
   };
 console.log("🔥 Sidebar role:", role);
   return (
-    <div className="sidebar">
+    <aside className={`sidebar ${isOpen ? "open" : ""}`} aria-label="주 메뉴">
       <h2 className="side-title">law hero web</h2>
 
       {/* ===================== 관리자 ===================== */}
@@ -24,6 +24,7 @@ console.log("🔥 Sidebar role:", role);
     <Link
       className={isActive("/admin") ? "active" : ""}
       to="/admin"
+      onClick={onClose}
     >
       📊 대시보드
     </Link>
@@ -31,6 +32,7 @@ console.log("🔥 Sidebar role:", role);
     <Link
       className={isActive("/admin/users") ? "active" : ""}
       to="/admin/users"
+      onClick={onClose}
     >
       👥 유저 관리
     </Link>
@@ -38,12 +40,14 @@ console.log("🔥 Sidebar role:", role);
     <Link
       className={isActive("/admin/counselors") ? "active" : ""}
       to="/admin/counselors"
+      onClick={onClose}
     >
       ⭐ 상담사 관리
     </Link>
     <Link
       className={isActive("/admin/support") ? "active" : ""}
       to="/admin/support"
+      onClick={onClose}
     >
       🛟 고객센터
     </Link>
@@ -51,6 +55,7 @@ console.log("🔥 Sidebar role:", role);
     <Link
       className={isActive("/admin/notice") ? "active" : ""}
       to="/admin/notice"
+      onClick={onClose}
     >
       📢 공지사항
     </Link>
@@ -63,6 +68,7 @@ console.log("🔥 Sidebar role:", role);
           <Link
             className={isActive("/counselor/dashboard") ? "active" : ""}
             to="/counselor/dashboard"
+            onClick={onClose}
           >
             💼 상담방 목록
           </Link>
@@ -70,6 +76,7 @@ console.log("🔥 Sidebar role:", role);
           <Link
             className={isActive("/counselor/profile") ? "active" : ""}
             to="/counselor/profile"
+            onClick={onClose}
           >
             🙍‍♂️ 내 프로필
           </Link>
@@ -82,12 +89,14 @@ console.log("🔥 Sidebar role:", role);
     <Link
       className={isActive("/community") ? "active" : ""}
       to="/community"
+      onClick={onClose}
     >
       🌐 커뮤니티
     </Link>
     <Link
       className={isActive("/community/profile") ? "active" : ""}
       to="/community/profile"
+      onClick={onClose}
     >
       👤 프로필
     </Link>
@@ -100,6 +109,7 @@ console.log("🔥 Sidebar role:", role);
           <Link
             className={isActive("/home") ? "active" : ""}
             to="/home"
+            onClick={onClose}
           >
             📁 내 상담
           </Link>
@@ -107,6 +117,7 @@ console.log("🔥 Sidebar role:", role);
           <Link
             className={isActive("/community") ? "active" : ""}
             to="/community"
+            onClick={onClose}
           >
             🌐 커뮤니티
           </Link>
@@ -117,6 +128,6 @@ console.log("🔥 Sidebar role:", role);
       <button className="logout-btn" onClick={handleLogout}>
         🚪 로그아웃
       </button>
-    </div>
+    </aside>
   );
 }

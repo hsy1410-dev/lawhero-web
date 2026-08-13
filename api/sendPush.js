@@ -197,21 +197,29 @@ async function sendWebPush(tokens, title, body, data) {
 
   for (const token of tokens) {
     try {
+      const notificationUrl =
+        data?.type === "consult" && data?.consultId
+          ? `/admin/consult/${data.consultId}`
+          : data?.type === "chat" && data?.consultId
+            ? `/counselor/chat/${data.consultId}`
+            : data?.type === "assign"
+              ? "/counselor/dashboard"
+              : "/";
+
       await admin.messaging().send({
         token,
-        notification: { title, body },
-        webpush: {
-          notification: {
-            icon: "/icon-192.png",
-            badge: "/icon-96.png",
-          },
+        data: {
+          title: String(title),
+          body: String(body),
+          type: String(data?.type || "notification"),
+          consultId: String(data?.consultId || ""),
+          adminTarget: String(data?.adminTarget || ""),
+          url: notificationUrl,
         },
-        data: Object.fromEntries(
-          Object.entries(data || {}).map(([k, v]) => [
-            k,
-            String(v),
-          ])
-        ),
+        webpush: {
+          headers: { Urgency: "high" },
+          fcmOptions: { link: notificationUrl },
+        },
       });
       summary.success += 1;
     } catch (err) {

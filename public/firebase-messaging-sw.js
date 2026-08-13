@@ -18,45 +18,38 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log("[SW] onBackgroundMessage:", payload);
 
-  const title = payload.notification?.title || "알림";
+  const data = payload.data || {};
+  const title = data.title || payload.notification?.title || "Law Hero 알림";
   const options = {
-    body: payload.notification?.body || "",
-    icon: "/icon-192.png",
-    badge: "/icon-96.png",     // ⭐ OS 알림에 매우 중요!
+    body: data.body || payload.notification?.body || "새 알림이 도착했습니다.",
+    icon: "/heart.png",
+    badge: "/heart.png",
+    tag: `lawhero-${data.type || "notification"}-${data.consultId || Date.now()}`,
+    requireInteraction: data.type === "consult",
+    renotify: true,
+    silent: false,
+    vibrate: [200, 100, 200],
+    data: { url: data.url || "/" },
   };
 
-  self.registration.showNotification(title, options);
+  return self.registration.showNotification(title, options);
 });
 
-/* ----------------------------------------------------
-   ✔ Chrome Push Event — 반드시 필요!!
-   → 이것이 있어야 OS 알림으로 뜸
----------------------------------------------------- */
-self.addEventListener("push", (event) => {
-  if (!event.data) return;
-
-  let payload = {};
-  try {
-    payload = event.data.json();
-  } catch (e) {
-    payload = { notification: { title: "알림", body: event.data.text() } };
-  }
-
-  const title = payload.notification?.title || "알림";
-  const options = {
-    body: payload.notification?.body || "",
-    icon: "/icon-192.png",
-    badge: "/icon-96.png",
-    requireInteraction: false,
-  };
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data?.url || "/", self.location.origin).href;
 
   event.waitUntil(
-    self.registration.showNotification(title, options).then(() => {
-      setTimeout(() => {
-        self.registration.getNotifications().then((notifications) => {
-          notifications.forEach((n) => n.close());
-        });
-      }, 5000); // 🔥 5초 후 자동 닫기
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      const sameOriginClient = clientList.find((client) =>
+        client.url.startsWith(self.location.origin)
+      );
+
+      if (sameOriginClient) {
+        return sameOriginClient.focus().then((client) => client.navigate(targetUrl));
+      }
+
+      return clients.openWindow(targetUrl);
     })
   );
 });

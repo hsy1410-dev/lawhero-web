@@ -92,3 +92,43 @@
   border: 1px solid var(--border);
   border-radius: 12px;
 }
+
+.consultation-content-box {
+  border-left: 4px solid var(--accent);
+}
+
+.consultation-content {
+  margin: 0;
+  padding: 18px;
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.consultation-content.empty {
+  color: var(--subtext);
+}
+
+@media (max-width: 820px) {
+  .detail-container {
+    gap: 18px;
+  }
+
+  .info-box,
+  .assigned-box {
+    padding: 16px;
+  }
+
+  .lawyer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .assign-btn {
+    width: 100%;
+    min-height: 48px;
+  }
+}

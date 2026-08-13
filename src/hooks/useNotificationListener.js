@@ -72,7 +72,6 @@ export default function useNotifications(user) {
   useEffect(() => {
     // 🔥 user 없을 때도 항상 동일한 shape 유지
     if (!user?.uid || !user?.role) {
-      setNotifications([]);
       return;
     }
 
@@ -103,7 +102,7 @@ export default function useNotifications(user) {
      🔚 항상 동일한 shape 반환 (🔥 핵심)
   -------------------------------------------------- */
   return {
-    notifications,
+    notifications: user?.uid ? notifications : [],
     markAsRead: user ? markAsRead : noop,
     markAllAsRead: user ? markAllAsRead : noop,
   };

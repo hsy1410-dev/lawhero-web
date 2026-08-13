@@ -8,6 +8,8 @@ import {
   doc,
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
+import MainLayout from "../../layouts/MainLayout";
+import "../../styles/adminShared.css";
 
 export default function AdminCounselors() {
   const [counselors, setCounselors] = useState([]);
@@ -172,8 +174,8 @@ const currentRoom = consultations.find(
   };
 
   return (
-    <div style={{ padding: 30 }}>
-      <h2>⭐ 상담사 관리</h2>
+    <MainLayout title="상담사 관리">
+    <div className="admin-mobile-page">
 
       {/* ================= 상담사 목록 ================= */}
       {counselors.map((user) => (
@@ -184,25 +186,20 @@ const currentRoom = consultations.find(
 <p>총 상담 수: {user.totalConsultations}</p>
 <p>🔥 오늘 상담 수: {user.todayCount}</p>
 
-          <div style={{ marginTop: 10 }}>
+          <div className="admin-action-row">
             <button onClick={() => handleViewConsultations(user.id)}>
               📊 상담 목록 보기
             </button>
 
             <button
               onClick={() => handleViewReviews(user.id)}
-              style={{ marginLeft: 10 }}
             >
               ⭐ 리뷰 보기
             </button>
 
             <button
               onClick={() => handleDelete(user.id)}
-              style={{
-                marginLeft: 10,
-                backgroundColor: "#EF4444",
-                color: "white",
-              }}
+              className="danger-action"
             >
               🗑 삭제
             </button>
@@ -212,7 +209,7 @@ const currentRoom = consultations.find(
 
       {/* ================= 상담 목록 ================= */}
       {selectedCounselor && (
-        <div style={{ marginTop: 50 }}>
+        <div className="admin-subsection">
           <h3>📊 상담 목록</h3>
 
           {consultations.map((room) => (
@@ -236,11 +233,10 @@ const currentRoom = consultations.find(
 
       {/* ================= 채팅 메시지 ================= */}
       {selectedRoom && (
-  <div style={{ marginTop: 30 }}>
+  <div className="admin-subsection">
     <h4>💬 채팅 기록</h4>
 
     {messages.map((msg) => {
-      const isClient = msg.senderId === currentRoom?.clientId;
       const isCounselor = msg.senderId === currentRoom?.counselorId;
 
       return (
@@ -314,6 +310,7 @@ const currentRoom = consultations.find(
         </div>
       )}
     </div>
+    </MainLayout>
   );
 }
 
@@ -334,7 +331,8 @@ const modalStyle = {
   background: "white",
   padding: 30,
   borderRadius: 16,
-  width: "500px",
+  width: "min(500px, calc(100vw - 32px))",
+  boxSizing: "border-box",
   maxHeight: "80vh",
   overflowY: "auto",
 };

@@ -7,13 +7,17 @@ import {
   updateDoc,
   doc,
   deleteDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
+import MainLayout from "../../layouts/MainLayout";
+import "../../styles/adminUsers.css";
 
 export default function AdminUsers({ role }) {
   const [staffUsers, setStaffUsers] = useState([]);
   const [appUsers, setAppUsers] = useState([]);
   const [selectedStaffRole, setSelectedStaffRole] = useState("admin");
+  const [selectedAppUsers, setSelectedAppUsers] = useState([]);
   const [searchApp, setSearchApp] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -21,26 +25,18 @@ export default function AdminUsers({ role }) {
     return <div>접근 권한이 없습니다.</div>;
   }
 
-  /* =====================================================
-     🔥 쿠폰 차감
-  ===================================================== */
   const deductCoupon = async (uid, couponId) => {
     if (!window.confirm("이 쿠폰을 차감하시겠습니까?")) return;
 
     try {
       await deleteDoc(doc(db, "app_users", uid, "coupons", couponId));
-
       setAppUsers((prev) =>
-        prev.map((u) =>
-          u.id === uid
-            ? {
-                ...u,
-                coupons: u.coupons.filter((c) => c.id !== couponId),
-              }
-            : u
+        prev.map((user) =>
+          user.id === uid
+            ? { ...user, coupons: user.coupons.filter((coupon) => coupon.id !== couponId) }
+            : user
         )
       );
-
       alert("쿠폰이 차감되었습니다.");
     } catch (error) {
       console.error(error);
@@ -48,9 +44,6 @@ export default function AdminUsers({ role }) {
     }
   };
 
-  /* =====================================================
-     🔥 관리자 / 상담사 / 전문가 역할별 조회
-  ===================================================== */
   const loadStaffUsersByRole = async (targetRole) => {
     setSelectedStaffRole(targetRole);
     setLoading(true);
@@ -60,18 +53,15 @@ export default function AdminUsers({ role }) {
         targetRole === "user"
           ? await getDocs(collection(db, "users"))
           : await getDocs(
-              query(
-                collection(db, "users"),
-                where("role", "==", targetRole)
-              )
+              query(collection(db, "users"), where("role", "==", targetRole))
             );
 
       const results = snap.docs
-        .map((d) => ({
-          id: d.id,
-          ...d.data(),
-          role: d.data().role || "user",
-          adminType: d.data().adminType || "",
+        .map((staffDoc) => ({
+          id: staffDoc.id,
+          ...staffDoc.data(),
+          role: staffDoc.data().role || "user",
+          adminType: staffDoc.data().adminType || "",
         }))
         .filter((user) => user.role === targetRole);
 
@@ -84,40 +74,50 @@ export default function AdminUsers({ role }) {
     }
   };
 
-  /* =====================================================
-     🔥 일반 사용자 검색
-  ===================================================== */
+  const loadCoupons = async (userDoc) => {
+    const couponSnap = await getDocs(
+      collection(db, "app_users", userDoc.id, "coupons")
+    );
+    return {
+      id: userDoc.id,
+      ...userDoc.data(),
+      coupons: couponSnap.docs.map((couponDoc) => ({
+        id: couponDoc.id,
+        ...couponDoc.data(),
+      })),
+    };
+  };
+
+  const loadAllAppUsers = async () => {
+    setLoading(true);
+    try {
+      const snap = await getDocs(collection(db, "app_users"));
+      setAppUsers(snap.docs.map((userDoc) => ({ id: userDoc.id, ...userDoc.data() })));
+      setSelectedAppUsers([]);
+    } catch (error) {
+      console.error(error);
+      alert("전체 고객을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const searchAppUsers = async () => {
-    if (!searchApp.trim()) return;
+    if (!searchApp.trim()) {
+      await loadAllAppUsers();
+      return;
+    }
 
     setLoading(true);
-
     try {
-      const q = query(
+      const appUserQuery = query(
         collection(db, "app_users"),
         where("nickname", "==", searchApp.trim())
       );
-
-      const snap = await getDocs(q);
-
-      const results = await Promise.all(
-        snap.docs.map(async (d) => {
-          const userData = { id: d.id, ...d.data() };
-
-          const couponSnap = await getDocs(
-            collection(db, "app_users", d.id, "coupons")
-          );
-
-          const coupons = couponSnap.docs.map((c) => ({
-            id: c.id,
-            ...c.data(),
-          }));
-
-          return { ...userData, coupons };
-        })
-      );
-
+      const snap = await getDocs(appUserQuery);
+      const results = await Promise.all(snap.docs.map(loadCoupons));
       setAppUsers(results);
+      setSelectedAppUsers([]);
     } catch (error) {
       console.error(error);
       alert("일반 사용자 검색 실패");
@@ -126,21 +126,13 @@ export default function AdminUsers({ role }) {
     }
   };
 
-  /* =====================================================
-     🔥 역할 변경
-  ===================================================== */
   const changeRole = async (uid, newRole) => {
     try {
       const updateData = { role: newRole };
-
-      if (newRole !== "admin") {
-        updateData.adminType = null;
-      }
+      if (newRole !== "admin") updateData.adminType = null;
 
       await updateDoc(doc(db, "users", uid), updateData);
-
-      setStaffUsers((prev) => prev.filter((u) => u.id !== uid));
-
+      setStaffUsers((prev) => prev.filter((user) => user.id !== uid));
       alert("권한이 변경되었습니다.");
     } catch (error) {
       console.error(error);
@@ -148,21 +140,14 @@ export default function AdminUsers({ role }) {
     }
   };
 
-  /* =====================================================
-     🔥 관리자 타입 변경
-  ===================================================== */
   const changeAdminType = async (uid, newAdminType) => {
     try {
-      await updateDoc(doc(db, "users", uid), {
-        adminType: newAdminType,
-      });
-
+      await updateDoc(doc(db, "users", uid), { adminType: newAdminType });
       setStaffUsers((prev) =>
-        prev.map((u) =>
-          u.id === uid ? { ...u, adminType: newAdminType } : u
+        prev.map((user) =>
+          user.id === uid ? { ...user, adminType: newAdminType } : user
         )
       );
-
       alert("관리자 유형이 변경되었습니다.");
     } catch (error) {
       console.error(error);
@@ -170,31 +155,85 @@ export default function AdminUsers({ role }) {
     }
   };
 
-  /* =====================================================
-     🔥 삭제
-  ===================================================== */
   const deleteStaffUser = async (uid) => {
     if (!window.confirm("정말 삭제하시겠습니까?")) return;
 
     try {
       await deleteDoc(doc(db, "users", uid));
-      setStaffUsers((prev) => prev.filter((u) => u.id !== uid));
+      setStaffUsers((prev) => prev.filter((user) => user.id !== uid));
     } catch (error) {
       console.error(error);
       alert("삭제 실패");
     }
   };
 
+  const deleteAppUserRecords = async (uids) => {
+    const refs = [];
+
+    for (const uid of uids) {
+      const couponSnap = await getDocs(collection(db, "app_users", uid, "coupons"));
+      couponSnap.docs.forEach((couponDoc) => refs.push(couponDoc.ref));
+      refs.push(doc(db, "app_users", uid));
+    }
+
+    for (let index = 0; index < refs.length; index += 450) {
+      const batch = writeBatch(db);
+      refs.slice(index, index + 450).forEach((ref) => batch.delete(ref));
+      await batch.commit();
+    }
+  };
+
   const deleteAppUser = async (uid) => {
-    if (!window.confirm("정말 삭제하시겠습니까?")) return;
+    if (!window.confirm("이 고객을 삭제하시겠습니까?")) return;
 
     try {
-      await deleteDoc(doc(db, "app_users", uid));
-      setAppUsers((prev) => prev.filter((u) => u.id !== uid));
+      await deleteAppUserRecords([uid]);
+      setAppUsers((prev) => prev.filter((user) => user.id !== uid));
+      setSelectedAppUsers((prev) => prev.filter((id) => id !== uid));
     } catch (error) {
       console.error(error);
       alert("삭제 실패");
     }
+  };
+
+  const deleteSelectedAppUsers = async () => {
+    if (selectedAppUsers.length === 0) {
+      alert("삭제할 고객을 선택해주세요.");
+      return;
+    }
+
+    if (!window.confirm(`선택한 고객 ${selectedAppUsers.length}명을 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await deleteAppUserRecords(selectedAppUsers);
+      const deletedIds = new Set(selectedAppUsers);
+      setAppUsers((prev) => prev.filter((user) => !deletedIds.has(user.id)));
+      setSelectedAppUsers([]);
+      alert("선택한 고객을 삭제했습니다.");
+    } catch (error) {
+      console.error(error);
+      alert("선택 삭제에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const allAppUsersSelected =
+    appUsers.length > 0 && appUsers.every((user) => selectedAppUsers.includes(user.id));
+
+  const toggleAllAppUsers = () => {
+    setSelectedAppUsers(
+      allAppUsersSelected ? [] : appUsers.map((user) => user.id)
+    );
+  };
+
+  const toggleAppUser = (uid) => {
+    setSelectedAppUsers((prev) =>
+      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
+    );
   };
 
   const roleLabelMap = {
@@ -212,187 +251,149 @@ export default function AdminUsers({ role }) {
   ];
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1>👑 유저 관리</h1>
+    <MainLayout title="고객 및 권한 관리">
+      <div className="admin-users-page">
+        {loading && <div className="admin-loading">정보를 불러오는 중...</div>}
 
-      {loading && <p>검색 중...</p>}
-
-      <h2>관리자 / 상담사 / 전문가 / 유저 조회</h2>
-
-      <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-        {staffRoleButtons.map((roleOption) => (
-          <button
-            key={roleOption.value}
-            onClick={() => loadStaffUsersByRole(roleOption.value)}
-            style={{
-              padding: "8px 14px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              backgroundColor:
-                selectedStaffRole === roleOption.value ? "#111827" : "#fff",
-              color: selectedStaffRole === roleOption.value ? "#fff" : "#111",
-              cursor: "pointer",
-            }}
-          >
-            {roleOption.label}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ marginTop: 20 }}>
-        <strong>
-          현재 보기: {roleLabelMap[selectedStaffRole]} ({staffUsers.length})
-        </strong>
-      </div>
-
-      {staffUsers.map((u) => (
-        <div
-          key={u.id}
-          style={{
-            marginTop: 20,
-            padding: 15,
-            border: "1px solid #ddd",
-            borderRadius: 8,
-          }}
-        >
-          <div><strong>{u.name || "이름 없음"}</strong></div>
-          <div style={{ color: "#666" }}>{u.email}</div>
-          <div style={{ fontSize: 12, color: "#aaa" }}>UID: {u.id}</div>
-          <div style={{ marginTop: 6 }}>
-            현재 role: <strong>{u.role || "user"}</strong>
+        <section className="admin-users-section">
+          <h2>관리자·상담사·전문가 권한</h2>
+          <div className="role-filter-row">
+            {staffRoleButtons.map((roleOption) => (
+              <button
+                key={roleOption.value}
+                type="button"
+                onClick={() => loadStaffUsersByRole(roleOption.value)}
+                className={selectedStaffRole === roleOption.value ? "selected" : ""}
+              >
+                {roleOption.label}
+              </button>
+            ))}
           </div>
 
-          {u.role === "admin" && (
-            <div style={{ marginTop: 6 }}>
-              현재 adminType: <strong>{u.adminType || "미설정"}</strong>
-            </div>
-          )}
+          <p className="result-count">
+            현재 보기: {roleLabelMap[selectedStaffRole]} ({staffUsers.length})
+          </p>
 
-          <select
-            value={u.role ?? ""}
-            onChange={(e) => changeRole(u.id, e.target.value)}
-            style={{ marginTop: 10 }}
-          >
-            <option value="">선택</option>
-            <option value="admin">admin</option>
-            <option value="counselor">counselor</option>
-            <option value="expert">expert</option>
-            <option value="user">user</option>
-          </select>
+          <div className="user-card-grid">
+            {staffUsers.map((user) => (
+              <article className="management-card" key={user.id}>
+                <strong>{user.name || user.realName || "이름 없음"}</strong>
+                <span>{user.email || "이메일 없음"}</span>
+                <small>UID: {user.id}</small>
+                <p>현재 권한: <strong>{user.role || "user"}</strong></p>
 
-          {u.role === "admin" && (
-            <select
-              value={u.adminType || "general"}
-              onChange={(e) => changeAdminType(u.id, e.target.value)}
-              style={{ marginTop: 10, marginLeft: 10 }}
-            >
-              <option value="general">general admin</option>
-              <option value="special">special admin</option>
-            </select>
-          )}
+                <div className="management-actions">
+                  <select value={user.role ?? ""} onChange={(event) => changeRole(user.id, event.target.value)}>
+                    <option value="">권한 선택</option>
+                    <option value="admin">admin</option>
+                    <option value="counselor">counselor</option>
+                    <option value="expert">expert</option>
+                    <option value="user">user</option>
+                  </select>
 
-          <button
-            onClick={() => deleteStaffUser(u.id)}
-            style={{
-              marginLeft: 10,
-              backgroundColor: "#ff4d4f",
-              color: "white",
-              border: "none",
-              padding: "6px 10px",
-              borderRadius: 5,
-            }}
-          >
-            삭제
-          </button>
-        </div>
-      ))}
+                  {user.role === "admin" && (
+                    <select value={user.adminType || "general"} onChange={(event) => changeAdminType(user.id, event.target.value)}>
+                      <option value="general">일반 관리자</option>
+                      <option value="special">특수 관리자</option>
+                    </select>
+                  )}
 
-      <hr style={{ margin: "50px 0" }} />
-
-      <h2>일반 사용자 검색</h2>
-
-      <input
-        type="text"
-        placeholder="닉네임 정확히 입력"
-        value={searchApp}
-        onChange={(e) => setSearchApp(e.target.value)}
-        style={{ padding: 8, width: 300 }}
-      />
-
-      <button onClick={searchAppUsers} style={{ marginLeft: 10 }}>
-        검색
-      </button>
-
-      {appUsers.map((u) => (
-        <div
-          key={u.id}
-          style={{
-            marginTop: 20,
-            padding: 15,
-            border: "1px solid #ddd",
-            borderRadius: 8,
-          }}
-        >
-          <div><strong>{u.nickname || "닉네임 없음"}</strong></div>
-          <div>이름: {u.name || "없음"}</div>
-          <div>📞 {u.phone || "전화번호 없음"}</div>
-          <div style={{ fontSize: 12, color: "#aaa" }}>UID: {u.id}</div>
-
-          {u.coupons && u.coupons.length > 0 && (
-            <div style={{ marginTop: 10 }}>
-              <strong>🎫 보유 쿠폰</strong>
-
-              {u.coupons.map((coupon) => (
-                <div
-                  key={coupon.id}
-                  style={{
-                    marginTop: 5,
-                    padding: 6,
-                    backgroundColor: "#f5f5f5",
-                    borderRadius: 6,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <span>
-                    {coupon.type === "consult_support" && "상담지원 쿠폰"}
-                    {coupon.type === "lawyer_fee_30" && "선임료 30% 지원"}
-                    {coupon.type === "lawyer_fee_50" && "선임료 50% 지원"}
-                  </span>
-
-                  <button
-                    onClick={() => deductCoupon(u.id, coupon.id)}
-                    style={{
-                      backgroundColor: "#ff7875",
-                      border: "none",
-                      color: "white",
-                      padding: "4px 8px",
-                      borderRadius: 4,
-                    }}
-                  >
-                    차감
+                  <button type="button" className="danger-btn" onClick={() => deleteStaffUser(user.id)}>
+                    삭제
                   </button>
                 </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="admin-users-section customer-section">
+          <div className="section-heading-row">
+            <div>
+              <h2>고객 관리</h2>
+              <p>전체 고객을 불러오거나 닉네임으로 정확히 검색할 수 있습니다.</p>
+            </div>
+            <button type="button" onClick={loadAllAppUsers}>전체 고객 불러오기</button>
+          </div>
+
+          <div className="customer-search-row">
+            <input
+              type="search"
+              placeholder="고객 닉네임"
+              value={searchApp}
+              onChange={(event) => setSearchApp(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && searchAppUsers()}
+            />
+            <button type="button" onClick={searchAppUsers}>검색</button>
+          </div>
+
+          <div className="bulk-action-bar">
+            <label>
+              <input
+                type="checkbox"
+                checked={allAppUsersSelected}
+                onChange={toggleAllAppUsers}
+                disabled={appUsers.length === 0}
+              />
+              전체 선택 ({appUsers.length}명)
+            </label>
+            <span>{selectedAppUsers.length}명 선택됨</span>
+            <button
+              type="button"
+              className="danger-btn"
+              onClick={deleteSelectedAppUsers}
+              disabled={selectedAppUsers.length === 0 || loading}
+            >
+              선택 고객 삭제
+            </button>
+          </div>
+
+          {appUsers.length === 0 ? (
+            <p className="customer-empty">조회된 고객이 없습니다.</p>
+          ) : (
+            <div className="customer-list">
+              {appUsers.map((user) => (
+                <article
+                  className={`management-card customer-card ${selectedAppUsers.includes(user.id) ? "selected" : ""}`}
+                  key={user.id}
+                >
+                  <label className="customer-select-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedAppUsers.includes(user.id)}
+                      onChange={() => toggleAppUser(user.id)}
+                    />
+                    <strong>{user.nickname || "닉네임 없음"}</strong>
+                  </label>
+                  <span>이름: {user.name || "없음"}</span>
+                  <span>전화번호: {user.phone || "없음"}</span>
+                  <small>UID: {user.id}</small>
+
+                  {user.coupons?.length > 0 && (
+                    <div className="coupon-list">
+                      <strong>보유 쿠폰</strong>
+                      {user.coupons.map((coupon) => (
+                        <div className="coupon-row" key={coupon.id}>
+                          <span>
+                            {coupon.type === "consult_support" && "상담지원 쿠폰"}
+                            {coupon.type === "lawyer_fee_30" && "선임료 30% 지원"}
+                            {coupon.type === "lawyer_fee_50" && "선임료 50% 지원"}
+                          </span>
+                          <button type="button" onClick={() => deductCoupon(user.id, coupon.id)}>차감</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button type="button" className="danger-btn customer-delete-btn" onClick={() => deleteAppUser(user.id)}>
+                    고객 삭제
+                  </button>
+                </article>
               ))}
             </div>
           )}
-
-          <button
-            onClick={() => deleteAppUser(u.id)}
-            style={{
-              marginTop: 10,
-              backgroundColor: "#ff4d4f",
-              color: "white",
-              border: "none",
-              padding: "6px 10px",
-              borderRadius: 5,
-            }}
-          >
-            삭제
-          </button>
-        </div>
-      ))}
-    </div>
+        </section>
+      </div>
+    </MainLayout>
   );
 }

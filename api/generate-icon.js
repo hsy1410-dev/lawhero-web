@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import { getStorage } from "firebase-admin/storage";
 import admin from "firebase-admin";
 
 if (!admin.apps.length) {

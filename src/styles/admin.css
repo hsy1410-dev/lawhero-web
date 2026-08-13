@@ -72,6 +72,13 @@
   color: var(--text);
 }
 
+.consult-preview {
+  max-width: 320px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ---- 테이블 버튼 (버튼은 버튼 전용 색만 사용) ---- */
 .table-btn {
   background: var(--btn);      /* 🎯 고정된 버튼색 */
@@ -116,6 +123,108 @@
 
 .lawyer-card p {
   color: var(--subtext);
+}
+
+@media (max-width: 820px) {
+  .admin-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 22px;
+  }
+
+  .admin-card {
+    padding: 16px 10px;
+  }
+
+  .admin-card h3 {
+    font-size: 14px;
+  }
+
+  .big-number {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .section-box {
+    margin-top: 24px;
+  }
+
+  .section-title {
+    font-size: 18px;
+  }
+
+  .admin-table,
+  .admin-table tbody,
+  .admin-table tr,
+  .admin-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .admin-table {
+    border: 0;
+    background: transparent;
+  }
+
+  .admin-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .admin-table tr {
+    margin-bottom: 12px;
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card-bg);
+  }
+
+  .admin-table td {
+    display: grid;
+    grid-template-columns: minmax(90px, 34%) 1fr;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+    max-width: none;
+  }
+
+  .admin-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .admin-table td::before {
+    content: attr(data-label);
+    color: var(--subtext);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .admin-table td[data-label="선택"] input {
+    width: 22px;
+    height: 22px;
+  }
+
+  .admin-table .table-btn {
+    width: 100%;
+    min-height: 42px;
+  }
+
+  .lawyer-list,
+  .lawyer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .admin-cards {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 .lawyer-card h3 {
   font-size: 18px;

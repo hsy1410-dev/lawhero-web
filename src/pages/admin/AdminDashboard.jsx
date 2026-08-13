@@ -11,12 +11,15 @@ import {
   where,
   serverTimestamp,
   increment,
+  addDoc,
 } from "firebase/firestore";
 
 import { auth, db } from "../../config/firebase";
 import MainLayout from "../../layouts/MainLayout";
 import "../../styles/admin.css";
 import { useNavigate } from "react-router-dom";
+import { sendPush } from "../../utils/sendPush";
+import { getConsultationPreview } from "../../utils/consultation";
 
 export default function AdminDashboard() {
   const nav = useNavigate();
@@ -142,20 +145,52 @@ export default function AdminDashboard() {
 
     try {
       for (const requestId of selectedRequests) {
-        const randomCounselor =
+        const counselorId =
           selectedCounselors[
             Math.floor(Math.random() * selectedCounselors.length)
           ];
+        const request = requests.find((item) => item.id === requestId);
+        const counselor = counselors.find((item) => item.id === counselorId);
+
+        if (!request || !counselor) continue;
+
+        const roomRef = await addDoc(collection(db, "chat_rooms"), {
+          clientId: request.userId,
+          counselorId,
+          users: [request.userId, counselorId],
+          requestId,
+          shortId: request.shortId ?? requestId.slice(0, 6).toUpperCase(),
+          category: request.category ?? "법률 상담",
+          status: "assigned",
+          lastMessage: "",
+          lastMessageAt: null,
+          createdAt: serverTimestamp(),
+        });
 
         await updateDoc(doc(db, "consult_requests", requestId), {
           status: "assigned",
-          counselorId: randomCounselor,
+          counselorId,
+          roomId: roomRef.id,
+          assignedCounselor: {
+            id: counselorId,
+            nickname: counselor.nickname ?? "",
+            realName: counselor.realName ?? "",
+          },
           assignedAt: serverTimestamp(),
           assignedBy: auth.currentUser?.uid ?? "auto",
         });
 
-        await updateDoc(doc(db, "users", randomCounselor), {
+        await updateDoc(doc(db, "users", counselorId), {
           assignedOpenCount: increment(1),
+        });
+
+        await sendPush({
+          type: "assign",
+          counselorUid: counselorId,
+          consultId: requestId,
+          message: `새 상담이 배정되었습니다. 상담코드: ${
+            request.shortId ?? requestId.slice(0, 6).toUpperCase()
+          }`,
         });
       }
 
@@ -226,6 +261,7 @@ export default function AdminDashboard() {
                 <th>상담 코드</th>
                 <th>유형</th>
                 <th>세부 유형</th>
+                <th>고객 상담 내용</th>
                 <th>관리 대상</th>
                 <th>요청 시간</th>
                 <th>보기</th>
@@ -235,7 +271,7 @@ export default function AdminDashboard() {
             <tbody>
               {requests.map((r) => (
                 <tr key={r.id}>
-                  <td>
+                  <td data-label="선택">
                     <input
                       type="checkbox"
                       checked={selectedRequests.includes(r.id)}
@@ -277,13 +313,16 @@ export default function AdminDashboard() {
                     />
                   </td>
 
-                  <td>{r.shortId ?? r.id.slice(0, 6).toUpperCase()}</td>
-                  <td>{r.category ?? "-"}</td>
-                  <td>{r.subCategory ?? "없음"}</td>
-                  <td>{r.adminTarget ?? "-"}</td>
-                  <td>{r.createdAt?.toDate?.().toLocaleString?.() ?? "-"}</td>
+                  <td data-label="상담 코드">{r.shortId ?? r.id.slice(0, 6).toUpperCase()}</td>
+                  <td data-label="유형">{r.category ?? "-"}</td>
+                  <td data-label="세부 유형">{r.subCategory ?? "없음"}</td>
+                  <td data-label="상담 내용" className="consult-preview" title={getConsultationPreview(r, 300)}>
+                    {getConsultationPreview(r)}
+                  </td>
+                  <td data-label="관리 대상">{r.adminTarget ?? "-"}</td>
+                  <td data-label="요청 시간">{r.createdAt?.toDate?.().toLocaleString?.() ?? "-"}</td>
 
-                  <td>
+                  <td data-label="보기">
                     <button
                       className="table-btn"
                       onClick={() => nav(`/admin/consult/${r.id}`)}
