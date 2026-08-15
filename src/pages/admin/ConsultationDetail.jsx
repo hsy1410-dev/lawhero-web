@@ -15,13 +15,20 @@ import { db } from "../../config/firebase";
 import MainLayout from "../../layouts/MainLayout";
 import "../../styles/adminDetail.css";
 import { sendPush } from "../../utils/sendPush";
-import { getConsultationText } from "../../utils/consultation";
+import {
+  getApplicationChannel,
+  getApplicationChannelLabel,
+  getConsultationText,
+  getConsultationUserId,
+  getPhoneNumber,
+} from "../../utils/consultation";
 
 export default function ConsultationDetail() {
   const { id } = useParams();
   const nav = useNavigate();
 
   const [data, setData] = useState(null);
+  const [appUser, setAppUser] = useState(null);
   const [counselors, setCounselors] = useState([]);
   const [selectedCounselor, setSelectedCounselor] =
     useState(null);
@@ -29,24 +36,45 @@ export default function ConsultationDetail() {
   useEffect(() => {
     let active = true;
 
-    Promise.all([
-      getDoc(doc(db, "consult_requests", id)),
-      getDocs(collection(db, "users")),
-    ]).then(([consultSnap, counselorSnap]) => {
-      if (!active) return;
+    const loadDetail = async () => {
+      try {
+        const [consultSnap, counselorSnap] = await Promise.all([
+          getDoc(doc(db, "consult_requests", id)),
+          getDocs(collection(db, "users")),
+        ]);
 
-      if (consultSnap.exists()) {
-        setData({ id: consultSnap.id, ...consultSnap.data() });
+        if (!active) return;
+
+        if (consultSnap.exists()) {
+          const consultation = { id: consultSnap.id, ...consultSnap.data() };
+          setData(consultation);
+
+          const userId = getConsultationUserId(consultation);
+          if (userId) {
+            try {
+              const appUserSnap = await getDoc(doc(db, "app_users", userId));
+              if (active) {
+                setAppUser(appUserSnap.exists() ? appUserSnap.data() : null);
+              }
+            } catch (error) {
+              console.warn(`app_users/${userId} 조회 실패:`, error);
+            }
+          }
+        }
+
+        if (active) {
+          setCounselors(
+            counselorSnap.docs
+              .map((counselorDoc) => ({ id: counselorDoc.id, ...counselorDoc.data() }))
+              .filter((counselor) => counselor.role === "counselor")
+          );
+        }
+      } catch (error) {
+        console.error("상담 상세 조회 실패:", error);
       }
+    };
 
-      setCounselors(
-        counselorSnap.docs
-          .map((counselorDoc) => ({ id: counselorDoc.id, ...counselorDoc.data() }))
-          .filter((counselor) => counselor.role === "counselor")
-      );
-    }).catch((error) => {
-      console.error("상담 상세 조회 실패:", error);
-    });
+    loadDetail();
 
     return () => {
       active = false;
@@ -61,6 +89,11 @@ export default function ConsultationDetail() {
       return alert("상담사를 선택하세요!");
     if (!data) return;
 
+    const requestUserId = getConsultationUserId(data);
+    if (!requestUserId) return alert("상담 신청자의 UID를 찾을 수 없습니다.");
+
+    const requestSource = getApplicationChannel(data);
+
     try {
       console.log("🔥 상담사 배정 시작");
 
@@ -68,12 +101,14 @@ export default function ConsultationDetail() {
       const roomRef = await addDoc(
         collection(db, "chat_rooms"),
         {
-          clientId: data.userId,
+          clientId: requestUserId,
           counselorId: selectedCounselor.id,
-          users: [data.userId, selectedCounselor.id],
+          users: [requestUserId, selectedCounselor.id],
           requestId: id,
           shortId: data.shortId ?? id.slice(0, 6).toUpperCase(),
           category: data.category ?? "법률 상담",
+          applicantPhone: getPhoneNumber(appUser, data),
+          ...(requestSource !== "unknown" ? { requestSource } : {}),
           status: "assigned",
           lastMessage: "",
           lastMessageAt: null,
@@ -128,7 +163,9 @@ export default function ConsultationDetail() {
         {/* ===== 상담 정보 ===== */}
         <div className="info-box">
           <h2>상담 기본 정보</h2>
-          <p><strong>사용자 UID:</strong> {data.userId}</p>
+          <p><strong>사용자 UID:</strong> {getConsultationUserId(data) ?? "없음"}</p>
+          <p><strong>전화번호:</strong> {getPhoneNumber(appUser, data) || "없음"}</p>
+          <p><strong>신청 경로:</strong> {getApplicationChannelLabel(data)}</p>
           <p><strong>상담 유형:</strong> {data.category}</p>
           <p><strong>세부 유형:</strong> {data.subCategory ?? "없음"}</p>
           <p>

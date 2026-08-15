@@ -19,7 +19,13 @@ import MainLayout from "../../layouts/MainLayout";
 import "../../styles/admin.css";
 import { useNavigate } from "react-router-dom";
 import { sendPush } from "../../utils/sendPush";
-import { getConsultationPreview } from "../../utils/consultation";
+import {
+  getApplicationChannel,
+  getApplicationChannelLabel,
+  getConsultationPreview,
+  getConsultationUserId,
+  getPhoneNumber,
+} from "../../utils/consultation";
 
 export default function AdminDashboard() {
   const nav = useNavigate();
@@ -104,6 +110,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!adminType) return;
 
+    let active = true;
+    let snapshotSequence = 0;
+
     const q = query(
       collection(db, "consult_requests"),
       where("status", "==", "waiting"),
@@ -111,9 +120,43 @@ export default function AdminDashboard() {
       orderBy("createdAt", "desc")
     );
 
-    return onSnapshot(q, (snap) => {
-      setRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const unsubscribe = onSnapshot(q, async (snap) => {
+      const sequence = ++snapshotSequence;
+      const requestList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const userIds = [
+        ...new Set(requestList.map(getConsultationUserId).filter(Boolean)),
+      ];
+
+      const userEntries = await Promise.all(
+        userIds.map(async (userId) => {
+          try {
+            const userSnap = await getDoc(doc(db, "app_users", userId));
+            return [userId, userSnap.exists() ? userSnap.data() : null];
+          } catch (error) {
+            console.warn(`app_users/${userId} 조회 실패:`, error);
+            return [userId, null];
+          }
+        })
+      );
+
+      if (!active || sequence !== snapshotSequence) return;
+
+      const appUsersById = new Map(userEntries);
+      setRequests(
+        requestList.map((request) => {
+          const userId = getConsultationUserId(request);
+          return {
+            ...request,
+            applicantPhone: getPhoneNumber(appUsersById.get(userId), request),
+          };
+        })
+      );
     });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [adminType]);
 
   /* ------------------------------------------------------------------
@@ -154,13 +197,23 @@ export default function AdminDashboard() {
 
         if (!request || !counselor) continue;
 
+        const requestUserId = getConsultationUserId(request);
+        if (!requestUserId) {
+          console.warn(`상담 요청 ${requestId}에 사용자 UID가 없습니다.`);
+          continue;
+        }
+
+        const requestSource = getApplicationChannel(request);
+
         const roomRef = await addDoc(collection(db, "chat_rooms"), {
-          clientId: request.userId,
+          clientId: requestUserId,
           counselorId,
-          users: [request.userId, counselorId],
+          users: [requestUserId, counselorId],
           requestId,
           shortId: request.shortId ?? requestId.slice(0, 6).toUpperCase(),
           category: request.category ?? "법률 상담",
+          applicantPhone: request.applicantPhone ?? "",
+          ...(requestSource !== "unknown" ? { requestSource } : {}),
           status: "assigned",
           lastMessage: "",
           lastMessageAt: null,
@@ -261,6 +314,8 @@ export default function AdminDashboard() {
                 <th>상담 코드</th>
                 <th>유형</th>
                 <th>세부 유형</th>
+                <th>전화번호</th>
+                <th>신청 경로</th>
                 <th>고객 상담 내용</th>
                 <th>관리 대상</th>
                 <th>요청 시간</th>
@@ -316,6 +371,8 @@ export default function AdminDashboard() {
                   <td data-label="상담 코드">{r.shortId ?? r.id.slice(0, 6).toUpperCase()}</td>
                   <td data-label="유형">{r.category ?? "-"}</td>
                   <td data-label="세부 유형">{r.subCategory ?? "없음"}</td>
+                  <td data-label="전화번호">{r.applicantPhone || "없음"}</td>
+                  <td data-label="신청 경로">{getApplicationChannelLabel(r)}</td>
                   <td data-label="상담 내용" className="consult-preview" title={getConsultationPreview(r, 300)}>
                     {getConsultationPreview(r)}
                   </td>

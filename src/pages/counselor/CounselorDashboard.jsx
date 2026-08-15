@@ -14,6 +14,10 @@ import { useNavigate } from "react-router-dom";
 import { setDoc } from "firebase/firestore";
 import { auth, db } from "../../config/firebase";
 import MainLayout from "../../layouts/MainLayout";
+import {
+  getApplicationChannelLabel,
+  getPhoneNumber,
+} from "../../utils/consultation";
 import "./counselor-dashboard.css";
 
 export default function CounselorDashboard() {
@@ -83,7 +87,8 @@ const toggleAvailability = async () => {
         const clientId = data.clientId ?? null;
 
         let nickname = "-";
-        let phone = "-";
+        let appUserData = null;
+        let consultRequestData = null;
 
         if (clientId) {
           try {
@@ -91,12 +96,24 @@ const toggleAvailability = async () => {
               doc(db, "app_users", clientId)
             );
             if (userSnap.exists()) {
-              const userData = userSnap.data();
-              nickname = userData.nickname ?? "-";
-              phone = userData.phone ?? "-";
+              appUserData = userSnap.data();
+              nickname = appUserData.nickname ?? "-";
             }
           } catch (e) {
             console.warn("유저 정보 불러오기 실패", e);
+          }
+        }
+
+        if (data.requestId) {
+          try {
+            const requestSnap = await getDoc(
+              doc(db, "consult_requests", data.requestId)
+            );
+            if (requestSnap.exists()) {
+              consultRequestData = requestSnap.data();
+            }
+          } catch (e) {
+            console.warn("상담 신청 경로 불러오기 실패", e);
           }
         }
 
@@ -107,7 +124,11 @@ return {
   shortId: data.shortId ?? d.id.substring(0, 6).toUpperCase(),
   clientId,
   nickname,
-  phone,
+  phone: getPhoneNumber(appUserData, data, consultRequestData) || "-",
+  applicationChannel: getApplicationChannelLabel({
+    ...consultRequestData,
+    ...data,
+  }),
   status: data.status ?? "waiting",
   unreadCount: data.unread?.[currentUid] ?? 0,
   lastMessage: data.lastMessage ?? "",
@@ -298,6 +319,10 @@ return {
 
 <p className="room-text">
   📞 전화번호: <span>{room.phone}</span>
+</p>
+
+<p className="room-text">
+  📱 신청 경로: <span>{room.applicationChannel}</span>
 </p>
 
               {/* 생성 */}
