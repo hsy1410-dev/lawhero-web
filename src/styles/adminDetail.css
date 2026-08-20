@@ -85,12 +85,88 @@
   background: var(--btn-hover);
 }
 
+.assign-btn:disabled,
+.cancel-assignment-btn:disabled,
+.reassign-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 /* 이미 배정된 경우 */
 .assigned-box {
   background: var(--card-bg);
   padding: 20px;
   border: 1px solid var(--border);
   border-radius: 12px;
+}
+
+.assignment-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.cancel-assignment-btn {
+  border: 0;
+  border-radius: 9px;
+  padding: 11px 18px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cancel-assignment-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.reassign-section {
+  margin-top: 26px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.reassign-section > h3 {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.assignment-help {
+  margin: 0 0 16px;
+  color: var(--subtext);
+  font-size: 14px;
+}
+
+.reassign-card {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+}
+
+.assignment-history-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 24px;
+}
+
+.assignment-history-list li {
+  display: grid;
+  grid-template-columns: minmax(80px, auto) 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+}
+
+.assignment-history-list time {
+  color: var(--subtext);
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .consultation-content-box {
@@ -130,5 +206,15 @@
   .assign-btn {
     width: 100%;
     min-height: 48px;
+  }
+
+  .assignment-actions,
+  .cancel-assignment-btn {
+    width: 100%;
+  }
+
+  .assignment-history-list li {
+    grid-template-columns: 1fr;
+    gap: 5px;
   }
 }

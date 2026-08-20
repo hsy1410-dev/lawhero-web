@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 import {
   doc,
   getDoc,
   getDocs,
-  updateDoc,
   serverTimestamp,
   collection,
-  addDoc,
+  arrayUnion,
+  deleteField,
+  increment,
+  Timestamp,
+  writeBatch,
 } from "firebase/firestore";
 
-import { db } from "../../config/firebase";
+import { auth, db } from "../../config/firebase";
 import MainLayout from "../../layouts/MainLayout";
 import "../../styles/adminDetail.css";
 import { sendPush } from "../../utils/sendPush";
@@ -25,13 +28,13 @@ import {
 
 export default function ConsultationDetail() {
   const { id } = useParams();
-  const nav = useNavigate();
 
   const [data, setData] = useState(null);
   const [appUser, setAppUser] = useState(null);
   const [counselors, setCounselors] = useState([]);
   const [selectedCounselor, setSelectedCounselor] =
     useState(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -93,14 +96,261 @@ export default function ConsultationDetail() {
     if (!requestUserId) return alert("상담 신청자의 UID를 찾을 수 없습니다.");
 
     const requestSource = getApplicationChannel(data);
+    const assignedBy = auth.currentUser?.uid ?? "admin";
+    const assignedAt = Timestamp.now();
 
     try {
-      console.log("🔥 상담사 배정 시작");
+      setIsSaving(true);
 
-      /* 1️⃣ 채팅방 생성 */
-      const roomRef = await addDoc(
-        collection(db, "chat_rooms"),
-        {
+      const roomRef = doc(collection(db, "chat_rooms"));
+      const batch = writeBatch(db);
+
+      batch.set(roomRef, {
+        clientId: requestUserId,
+        counselorId: selectedCounselor.id,
+        users: [requestUserId, selectedCounselor.id],
+        requestId: id,
+        shortId: data.shortId ?? id.slice(0, 6).toUpperCase(),
+        category: data.category ?? "법률 상담",
+        applicantPhone: getPhoneNumber(appUser, data),
+        ...(requestSource !== "unknown" ? { requestSource } : {}),
+        status: "assigned",
+        lastMessage: "",
+        lastMessageAt: null,
+        createdAt: serverTimestamp(),
+      });
+
+      batch.update(doc(db, "consult_requests", id), {
+        status: "assigned",
+        counselorId: selectedCounselor.id,
+        assignedAt: serverTimestamp(),
+        assignedBy,
+        roomId: roomRef.id,
+        assignedCounselor: {
+          id: selectedCounselor.id,
+          nickname: selectedCounselor.nickname ?? "",
+          realName: selectedCounselor.realName ?? "",
+        },
+        assignmentHistory: arrayUnion({
+          action: "assigned",
+          counselorId: selectedCounselor.id,
+          counselorNickname:
+            selectedCounselor.nickname ?? selectedCounselor.realName ?? "",
+          performedBy: assignedBy,
+          at: assignedAt,
+        }),
+      });
+
+      batch.update(doc(db, "users", selectedCounselor.id), {
+        assignedOpenCount: increment(1),
+      });
+
+      await batch.commit();
+
+      try {
+        await sendPush({
+          type: "assign",
+          counselorUid: selectedCounselor.id,
+          consultId: id,
+          message: `새 상담이 배정되었습니다. 상담코드: ${
+            data.shortId ?? id.slice(0, 6).toUpperCase()
+          }`,
+        });
+      } catch (pushError) {
+        console.warn("배정 알림 발송 실패:", pushError);
+      }
+
+      alert("상담사가 배정되었습니다!");
+      setData((previous) => ({
+        ...previous,
+        status: "assigned",
+        counselorId: selectedCounselor.id,
+        assignedAt,
+        assignedBy,
+        roomId: roomRef.id,
+        assignedCounselor: {
+          id: selectedCounselor.id,
+          nickname: selectedCounselor.nickname ?? "",
+          realName: selectedCounselor.realName ?? "",
+        },
+        assignmentHistory: [
+          ...(previous.assignmentHistory ?? []),
+          {
+            action: "assigned",
+            counselorId: selectedCounselor.id,
+            counselorNickname:
+              selectedCounselor.nickname ?? selectedCounselor.realName ?? "",
+            performedBy: assignedBy,
+            at: assignedAt,
+          },
+        ],
+      }));
+      setSelectedCounselor(null);
+    } catch (err) {
+      console.error("❌ 배정 오류:", err);
+      alert("배정 중 오류가 발생했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const cancelAssignment = async () => {
+    if (!data || data.status !== "assigned" || isSaving) return;
+
+    const currentCounselorId =
+      data.assignedCounselor?.id ?? data.counselorId ?? null;
+    const currentCounselorName =
+      data.assignedCounselor?.nickname ??
+      data.assignedCounselor?.realName ??
+      "알 수 없음";
+
+    if (
+      !window.confirm(
+        `${currentCounselorName} 상담사의 배정을 취소하시겠습니까?\n취소 후 이 상담은 다시 배정 대기 목록으로 이동합니다.`
+      )
+    ) {
+      return;
+    }
+
+    const requestUserId = getConsultationUserId(data);
+    const performedBy = auth.currentUser?.uid ?? "admin";
+    const cancelledAt = Timestamp.now();
+
+    try {
+      setIsSaving(true);
+
+      const batch = writeBatch(db);
+      const requestRef = doc(db, "consult_requests", id);
+
+      batch.update(requestRef, {
+        status: "waiting",
+        counselorId: deleteField(),
+        roomId: deleteField(),
+        assignedCounselor: deleteField(),
+        assignedAt: deleteField(),
+        assignedBy: deleteField(),
+        lastAssignmentCancelledAt: serverTimestamp(),
+        lastAssignmentCancelledBy: performedBy,
+        assignmentHistory: arrayUnion({
+          action: "cancelled",
+          counselorId: currentCounselorId ?? "",
+          counselorNickname: currentCounselorName,
+          performedBy,
+          at: cancelledAt,
+        }),
+      });
+
+      if (data.roomId) {
+        const roomRef = doc(db, "chat_rooms", data.roomId);
+        const roomSnap = await getDoc(roomRef);
+
+        if (roomSnap.exists()) {
+          const roomUpdate = {
+            status: "assignment_cancelled",
+            counselorId: deleteField(),
+            previousCounselorId: currentCounselorId ?? "",
+            users: requestUserId ? [requestUserId] : [],
+            assignmentCancelledAt: serverTimestamp(),
+            assignmentCancelledBy: performedBy,
+          };
+
+          if (currentCounselorId) {
+            roomUpdate[`unread.${currentCounselorId}`] = deleteField();
+          }
+
+          batch.update(roomRef, roomUpdate);
+        }
+      }
+
+      if (
+        currentCounselorId &&
+        counselors.some(
+          (counselor) =>
+            counselor.id === currentCounselorId &&
+            Number(counselor.assignedOpenCount ?? 0) > 0
+        )
+      ) {
+        batch.update(doc(db, "users", currentCounselorId), {
+          assignedOpenCount: increment(-1),
+        });
+      }
+
+      await batch.commit();
+
+      setData((previous) => ({
+        ...previous,
+        status: "waiting",
+        counselorId: undefined,
+        roomId: undefined,
+        assignedCounselor: undefined,
+        assignedAt: undefined,
+        assignedBy: undefined,
+        assignmentHistory: [
+          ...(previous.assignmentHistory ?? []),
+          {
+            action: "cancelled",
+            counselorId: currentCounselorId ?? "",
+            counselorNickname: currentCounselorName,
+            performedBy,
+            at: cancelledAt,
+          },
+        ],
+      }));
+      setSelectedCounselor(null);
+      alert("배정을 취소했습니다. 상담이 배정 대기 상태로 변경되었습니다.");
+    } catch (error) {
+      console.error("배정 취소 오류:", error);
+      alert("배정을 취소하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const reassignCounselor = async () => {
+    if (!data || data.status !== "assigned" || isSaving) return;
+    if (!selectedCounselor) return alert("새로 배정할 상담사를 선택하세요.");
+
+    const previousCounselorId =
+      data.assignedCounselor?.id ?? data.counselorId ?? null;
+    if (selectedCounselor.id === previousCounselorId) {
+      return alert("현재 담당 상담사와 다른 상담사를 선택하세요.");
+    }
+
+    const previousCounselorName =
+      data.assignedCounselor?.nickname ??
+      data.assignedCounselor?.realName ??
+      "알 수 없음";
+    if (
+      !window.confirm(
+        `${previousCounselorName} 상담사에서 ${
+          selectedCounselor.nickname ?? selectedCounselor.realName ?? "선택 상담사"
+        } 상담사로 재배정하시겠습니까?`
+      )
+    ) {
+      return;
+    }
+
+    const requestUserId = getConsultationUserId(data);
+    if (!requestUserId) return alert("상담 신청자의 UID를 찾을 수 없습니다.");
+
+    const performedBy = auth.currentUser?.uid ?? "admin";
+    const reassignedAt = Timestamp.now();
+    const requestSource = getApplicationChannel(data);
+
+    try {
+      setIsSaving(true);
+
+      const batch = writeBatch(db);
+      let roomRef = data.roomId ? doc(db, "chat_rooms", data.roomId) : null;
+      let roomExists = false;
+
+      if (roomRef) {
+        roomExists = (await getDoc(roomRef)).exists();
+      }
+
+      if (!roomExists) {
+        roomRef = doc(collection(db, "chat_rooms"));
+        batch.set(roomRef, {
           clientId: requestUserId,
           counselorId: selectedCounselor.id,
           users: [requestUserId, selectedCounselor.id],
@@ -113,38 +363,126 @@ export default function ConsultationDetail() {
           lastMessage: "",
           lastMessageAt: null,
           createdAt: serverTimestamp(),
+          reassignedAt: serverTimestamp(),
+          reassignedBy: performedBy,
+        });
+      } else {
+        const roomUpdate = {
+          counselorId: selectedCounselor.id,
+          previousCounselorId: previousCounselorId ?? "",
+          users: [requestUserId, selectedCounselor.id],
+          status: "assigned",
+          reassignedAt: serverTimestamp(),
+          reassignedBy: performedBy,
+          [`unread.${selectedCounselor.id}`]: 0,
+        };
+
+        if (previousCounselorId) {
+          roomUpdate[`unread.${previousCounselorId}`] = deleteField();
         }
-      );
 
-      const roomId = roomRef.id;
+        batch.update(roomRef, roomUpdate);
+      }
 
-      /* 2️⃣ consult_requests 업데이트 */
-      await updateDoc(doc(db, "consult_requests", id), {
+      batch.update(doc(db, "consult_requests", id), {
         status: "assigned",
-        assignedAt: serverTimestamp(),
-        roomId,
+        counselorId: selectedCounselor.id,
+        roomId: roomRef.id,
         assignedCounselor: {
           id: selectedCounselor.id,
           nickname: selectedCounselor.nickname ?? "",
           realName: selectedCounselor.realName ?? "",
         },
+        assignedAt: serverTimestamp(),
+        assignedBy: performedBy,
+        reassignedAt: serverTimestamp(),
+        assignmentHistory: arrayUnion({
+          action: "reassigned",
+          previousCounselorId: previousCounselorId ?? "",
+          previousCounselorNickname: previousCounselorName,
+          counselorId: selectedCounselor.id,
+          counselorNickname:
+            selectedCounselor.nickname ?? selectedCounselor.realName ?? "",
+          performedBy,
+          at: reassignedAt,
+        }),
       });
 
-      /* 3️⃣ 상담사에게 푸시 발송 */
-      await sendPush({
-        type: "assign",
-        counselorUid: selectedCounselor.id,
-        consultId: id,
-        message: `새 상담이 배정되었습니다. 상담코드: ${
-          data.shortId ?? id.slice(0, 6).toUpperCase()
-        }`,
+      if (
+        previousCounselorId &&
+        counselors.some(
+          (counselor) =>
+            counselor.id === previousCounselorId &&
+            Number(counselor.assignedOpenCount ?? 0) > 0
+        )
+      ) {
+        batch.update(doc(db, "users", previousCounselorId), {
+          assignedOpenCount: increment(-1),
+        });
+      }
+      batch.update(doc(db, "users", selectedCounselor.id), {
+        assignedOpenCount: increment(1),
       });
 
-      alert("상담사가 배정되었습니다!");
-      nav(-1);
-    } catch (err) {
-      console.error("❌ 배정 오류:", err);
-      alert("배정 중 오류가 발생했습니다.");
+      await batch.commit();
+
+      try {
+        await sendPush({
+          type: "assign",
+          counselorUid: selectedCounselor.id,
+          consultId: id,
+          message: `상담이 재배정되었습니다. 상담코드: ${
+            data.shortId ?? id.slice(0, 6).toUpperCase()
+          }`,
+        });
+      } catch (pushError) {
+        console.warn("재배정 알림 발송 실패:", pushError);
+      }
+
+      const nextCounselor = selectedCounselor;
+      setData((previous) => ({
+        ...previous,
+        status: "assigned",
+        counselorId: nextCounselor.id,
+        roomId: roomRef.id,
+        assignedCounselor: {
+          id: nextCounselor.id,
+          nickname: nextCounselor.nickname ?? "",
+          realName: nextCounselor.realName ?? "",
+        },
+        assignedAt: reassignedAt,
+        assignedBy: performedBy,
+        reassignedAt,
+        assignmentHistory: [
+          ...(previous.assignmentHistory ?? []),
+          {
+            action: "reassigned",
+            previousCounselorId: previousCounselorId ?? "",
+            previousCounselorNickname: previousCounselorName,
+            counselorId: nextCounselor.id,
+            counselorNickname:
+              nextCounselor.nickname ?? nextCounselor.realName ?? "",
+            performedBy,
+            at: reassignedAt,
+          },
+        ],
+      }));
+      setSelectedCounselor(null);
+      alert("상담사를 재배정했습니다.");
+    } catch (error) {
+      console.error("재배정 오류:", error);
+      alert("재배정하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const formatDateTime = (timestamp) => {
+    if (!timestamp) return "-";
+    try {
+      return timestamp.toDate().toLocaleString();
+    } catch {
+      return "-";
     }
   };
 
@@ -217,8 +555,9 @@ export default function ConsultationDetail() {
             <button
               className="assign-btn"
               onClick={assignCounselor}
+              disabled={isSaving || !selectedCounselor}
             >
-              선택한 상담사에게 배정하기
+              {isSaving ? "처리 중..." : "선택한 상담사에게 배정하기"}
             </button>
           </div>
         )}
@@ -226,14 +565,97 @@ export default function ConsultationDetail() {
         {/* ===== 이미 배정된 경우 ===== */}
         {data.status === "assigned" && (
           <div className="assigned-box">
-            <h2>이미 배정 완료</h2>
+            <h2>현재 배정 정보</h2>
             <p>
               담당 상담사:{" "}
               <strong>
-                {data.assignedCounselor?.nickname ??
+                {data.assignedCounselor?.nickname ||
+                  data.assignedCounselor?.realName ||
                   "알 수 없음"}
               </strong>
             </p>
+            <p><strong>배정 시간:</strong> {formatDateTime(data.assignedAt)}</p>
+
+            <div className="assignment-actions">
+              <button
+                type="button"
+                className="cancel-assignment-btn"
+                onClick={cancelAssignment}
+                disabled={isSaving}
+              >
+                {isSaving ? "처리 중..." : "배정 취소"}
+              </button>
+            </div>
+
+            <div className="reassign-section">
+              <h3>다른 상담사로 재배정</h3>
+              <p className="assignment-help">
+                새 담당자를 선택하면 기존 채팅방과 상담 기록은 그대로 유지됩니다.
+              </p>
+              <div className="lawyer-grid">
+                {counselors
+                  .filter(
+                    (counselor) =>
+                      counselor.id !==
+                      (data.assignedCounselor?.id ?? data.counselorId)
+                  )
+                  .map((counselor) => (
+                    <button
+                      type="button"
+                      key={counselor.id}
+                      className={`lawyer-card reassign-card ${
+                        selectedCounselor?.id === counselor.id ? "selected" : ""
+                      }`}
+                      onClick={() => setSelectedCounselor(counselor)}
+                      disabled={isSaving}
+                    >
+                      <h3>{counselor.nickname ?? "닉네임 없음"}</h3>
+                      <p>실명: {counselor.realName ?? "미등록"}</p>
+                      <span className="uid">UID: {counselor.id}</span>
+                    </button>
+                  ))}
+              </div>
+              <button
+                type="button"
+                className="assign-btn"
+                onClick={reassignCounselor}
+                disabled={isSaving || !selectedCounselor}
+              >
+                {isSaving ? "처리 중..." : "선택한 상담사로 재배정"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {Array.isArray(data.assignmentHistory) && data.assignmentHistory.length > 0 && (
+          <div className="info-box assignment-history-box">
+            <h2>배정 변경 기록</h2>
+            <ol className="assignment-history-list">
+              {[...data.assignmentHistory]
+                .sort(
+                  (a, b) =>
+                    (b.at?.toMillis?.() ?? 0) - (a.at?.toMillis?.() ?? 0)
+                )
+                .map((history, index) => (
+                  <li key={`${history.at?.toMillis?.() ?? "history"}-${index}`}>
+                    <strong>
+                      {history.action === "cancelled"
+                        ? "배정 취소"
+                        : history.action === "reassigned"
+                          ? "재배정"
+                          : "최초 배정"}
+                    </strong>
+                    <span>
+                      {history.action === "reassigned"
+                        ? `${history.previousCounselorNickname || "이전 상담사"} → ${
+                            history.counselorNickname || "새 상담사"
+                          }`
+                        : history.counselorNickname || "상담사 정보 없음"}
+                    </span>
+                    <time>{formatDateTime(history.at)}</time>
+                  </li>
+                ))}
+            </ol>
           </div>
         )}
       </div>

@@ -7,11 +7,10 @@ import {
   orderBy,
   query,
   Timestamp,
-  updateDoc,
   where,
   serverTimestamp,
   increment,
-  addDoc,
+  arrayUnion,
   writeBatch,
 } from "firebase/firestore";
 
@@ -33,6 +32,8 @@ export default function AdminDashboard() {
 
   const [lastIndex, setLastIndex] = useState(null);
   const [assignedCount, setAssignedCount] = useState(0);
+  const [assignedRequests, setAssignedRequests] = useState([]);
+  const [assignedRequestsLoading, setAssignedRequestsLoading] = useState(true);
   const [requests, setRequests] = useState([]);
   const [counselors, setCounselors] = useState([]);
   const [adminType, setAdminType] = useState(null);
@@ -166,6 +167,44 @@ export default function AdminDashboard() {
   }, [adminType]);
 
   /* ------------------------------------------------------------------
+      현재 배정된 상담 내역
+  ------------------------------------------------------------------ */
+  useEffect(() => {
+    if (!adminType) return;
+
+    setAssignedRequestsLoading(true);
+
+    const q = query(
+      collection(db, "consult_requests"),
+      where("status", "==", "assigned"),
+      where("adminTarget", "==", adminType)
+    );
+
+    return onSnapshot(
+      q,
+      (snap) => {
+        const assigned = snap.docs
+          .map((requestDoc) => ({ id: requestDoc.id, ...requestDoc.data() }))
+          .sort((a, b) => {
+            const aTime =
+              a.assignedAt?.toMillis?.() ?? a.createdAt?.toMillis?.() ?? 0;
+            const bTime =
+              b.assignedAt?.toMillis?.() ?? b.createdAt?.toMillis?.() ?? 0;
+            return bTime - aTime;
+          });
+
+        setAssignedRequests(assigned);
+        setAssignedRequestsLoading(false);
+      },
+      (error) => {
+        console.error("배정된 상담 내역 조회 실패:", error);
+        setAssignedRequests([]);
+        setAssignedRequestsLoading(false);
+      }
+    );
+  }, [adminType]);
+
+  /* ------------------------------------------------------------------
       ⭐ 상담사 리스트
       - 일단 전체 상담사 표시
       - 나중에 필요하면 special/general 별 필터 추가 가능
@@ -211,7 +250,12 @@ export default function AdminDashboard() {
 
         const requestSource = getApplicationChannel(request);
 
-        const roomRef = await addDoc(collection(db, "chat_rooms"), {
+        const roomRef = doc(collection(db, "chat_rooms"));
+        const assignedAt = Timestamp.now();
+        const assignedBy = auth.currentUser?.uid ?? "auto";
+        const batch = writeBatch(db);
+
+        batch.set(roomRef, {
           clientId: requestUserId,
           counselorId,
           users: [requestUserId, counselorId],
@@ -226,7 +270,7 @@ export default function AdminDashboard() {
           createdAt: serverTimestamp(),
         });
 
-        await updateDoc(doc(db, "consult_requests", requestId), {
+        batch.update(doc(db, "consult_requests", requestId), {
           status: "assigned",
           counselorId,
           roomId: roomRef.id,
@@ -236,21 +280,34 @@ export default function AdminDashboard() {
             realName: counselor.realName ?? "",
           },
           assignedAt: serverTimestamp(),
-          assignedBy: auth.currentUser?.uid ?? "auto",
+          assignedBy,
+          assignmentHistory: arrayUnion({
+            action: "assigned",
+            counselorId,
+            counselorNickname: counselor.nickname ?? counselor.realName ?? "",
+            performedBy: assignedBy,
+            at: assignedAt,
+          }),
         });
 
-        await updateDoc(doc(db, "users", counselorId), {
+        batch.update(doc(db, "users", counselorId), {
           assignedOpenCount: increment(1),
         });
 
-        await sendPush({
-          type: "assign",
-          counselorUid: counselorId,
-          consultId: requestId,
-          message: `새 상담이 배정되었습니다. 상담코드: ${
-            request.shortId ?? requestId.slice(0, 6).toUpperCase()
-          }`,
-        });
+        await batch.commit();
+
+        try {
+          await sendPush({
+            type: "assign",
+            counselorUid: counselorId,
+            consultId: requestId,
+            message: `새 상담이 배정되었습니다. 상담코드: ${
+              request.shortId ?? requestId.slice(0, 6).toUpperCase()
+            }`,
+          });
+        } catch (pushError) {
+          console.warn(`상담 요청 ${requestId} 배정 알림 발송 실패:`, pushError);
+        }
       }
 
       alert("자동 배정 완료!");
@@ -468,6 +525,60 @@ export default function AdminDashboard() {
                       onClick={() => nav(`/admin/consult/${r.id}`)}
                     >
                       상세
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      {/* 현재 배정된 상담 내역 */}
+      <section className="section-box">
+        <h2 className="section-title">
+          배정된 상담 내역 {adminType === "special" ? "(특수)" : "(일반)"}
+        </h2>
+
+        {assignedRequestsLoading ? (
+          <p className="empty-text">배정 내역을 불러오는 중입니다...</p>
+        ) : assignedRequests.length === 0 ? (
+          <p className="empty-text">현재 배정된 상담이 없습니다.</p>
+        ) : (
+          <table className="admin-table assigned-consult-table">
+            <thead>
+              <tr>
+                <th>상담 코드</th>
+                <th>유형</th>
+                <th>세부 유형</th>
+                <th>담당 상담사</th>
+                <th>배정 시간</th>
+                <th>관리</th>
+              </tr>
+            </thead>
+            <tbody>
+              {assignedRequests.map((request) => (
+                <tr key={request.id}>
+                  <td data-label="상담 코드">
+                    {request.shortId ?? request.id.slice(0, 6).toUpperCase()}
+                  </td>
+                  <td data-label="유형">{request.category ?? "-"}</td>
+                  <td data-label="세부 유형">{request.subCategory ?? "없음"}</td>
+                  <td data-label="담당 상담사">
+                    {request.assignedCounselor?.nickname ||
+                      request.assignedCounselor?.realName ||
+                      "알 수 없음"}
+                  </td>
+                  <td data-label="배정 시간">
+                    {request.assignedAt?.toDate?.().toLocaleString?.() ?? "-"}
+                  </td>
+                  <td data-label="관리">
+                    <button
+                      type="button"
+                      className="table-btn"
+                      onClick={() => nav(`/admin/consult/${request.id}`)}
+                    >
+                      취소 · 재배정
                     </button>
                   </td>
                 </tr>
