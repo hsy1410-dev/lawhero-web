@@ -47,6 +47,33 @@
   padding: 10px;
 }
 
+.consult-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.consult-action-bar span {
+  color: var(--subtext);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.consult-action-bar .danger-btn {
+  background: #dc2626;
+}
+
+.consult-action-bar .danger-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.consult-action-bar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* ---- 상담 테이블 ---- */
 .admin-table {
   width: 100%;
@@ -70,6 +97,26 @@
   padding: 12px;
   border-bottom: 1px solid var(--border);
   color: var(--text);
+}
+
+.select-all-requests {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.select-all-requests input,
+.admin-table td[data-label="선택"] input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--btn);
+  cursor: pointer;
+}
+
+.admin-table tr.selected-row td {
+  background: color-mix(in srgb, var(--btn) 8%, transparent);
 }
 
 .consult-preview {
@@ -151,6 +198,19 @@
 
   .section-title {
     font-size: 18px;
+  }
+
+  .consult-action-bar {
+    align-items: stretch;
+  }
+
+  .consult-action-bar span {
+    flex-basis: 100%;
+  }
+
+  .consult-action-bar button {
+    flex: 1 1 180px;
+    min-height: 44px;
   }
 
   .admin-table,

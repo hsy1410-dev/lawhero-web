@@ -12,6 +12,7 @@ import {
   serverTimestamp,
   increment,
   addDoc,
+  writeBatch,
 } from "firebase/firestore";
 
 import { auth, db } from "../../config/firebase";
@@ -39,6 +40,7 @@ export default function AdminDashboard() {
 
   const [selectedRequests, setSelectedRequests] = useState([]);
   const [selectedCounselors, setSelectedCounselors] = useState([]);
+  const [deletingRequests, setDeletingRequests] = useState(false);
 
   /* ------------------------------------------------------------------
       ⭐ 현재 로그인 관리자 타입 불러오기
@@ -151,6 +153,10 @@ export default function AdminDashboard() {
           };
         })
       );
+      const visibleRequestIds = new Set(requestList.map((request) => request.id));
+      setSelectedRequests((previous) =>
+        previous.filter((requestId) => visibleRequestIds.has(requestId))
+      );
     });
 
     return () => {
@@ -255,6 +261,54 @@ export default function AdminDashboard() {
     }
   };
 
+  const deleteSelectedRequests = async () => {
+    const requestIds = selectedRequests.filter((requestId) =>
+      requests.some((request) => request.id === requestId)
+    );
+
+    if (requestIds.length === 0) {
+      alert("삭제할 상담 신청을 선택하세요.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `선택한 상담 신청 ${requestIds.length}건을 삭제하시겠습니까?\n삭제한 신청은 복구할 수 없습니다.`
+    );
+    if (!confirmed) return;
+
+    setDeletingRequests(true);
+
+    try {
+      for (let index = 0; index < requestIds.length; index += 450) {
+        const batch = writeBatch(db);
+        requestIds.slice(index, index + 450).forEach((requestId) => {
+          batch.delete(doc(db, "consult_requests", requestId));
+        });
+        await batch.commit();
+      }
+
+      setSelectedRequests([]);
+      setLastIndex(null);
+      alert(`상담 신청 ${requestIds.length}건을 삭제했습니다.`);
+    } catch (error) {
+      console.error("상담 신청 선택 삭제 실패:", error);
+      alert("선택한 상담 신청을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setDeletingRequests(false);
+    }
+  };
+
+  const allRequestsSelected =
+    requests.length > 0 &&
+    requests.every((request) => selectedRequests.includes(request.id));
+
+  const toggleAllRequests = () => {
+    setSelectedRequests(
+      allRequestsSelected ? [] : requests.map((request) => request.id)
+    );
+    setLastIndex(null);
+  };
+
   if (loadingAdminType) {
     return (
       <MainLayout title="관리자 대시보드">
@@ -292,9 +346,23 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div style={{ marginBottom: 20 }}>
-        <button className="primary-btn" onClick={autoAssign}>
+      <div className="consult-action-bar">
+        <span>{selectedRequests.length}건 선택됨</span>
+        <button
+          type="button"
+          className="primary-btn"
+          onClick={autoAssign}
+          disabled={deletingRequests}
+        >
           선택 상담 자동 배정
+        </button>
+        <button
+          type="button"
+          className="danger-btn"
+          onClick={deleteSelectedRequests}
+          disabled={selectedRequests.length === 0 || deletingRequests}
+        >
+          {deletingRequests ? "삭제 중..." : "선택 상담 삭제"}
         </button>
       </div>
 
@@ -310,7 +378,17 @@ export default function AdminDashboard() {
           <table className="admin-table">
             <thead>
               <tr>
-                <th>선택</th>
+                <th>
+                  <label className="select-all-requests">
+                    <input
+                      type="checkbox"
+                      checked={allRequestsSelected}
+                      onChange={toggleAllRequests}
+                      disabled={deletingRequests}
+                    />
+                    <span>전체 선택</span>
+                  </label>
+                </th>
                 <th>상담 코드</th>
                 <th>유형</th>
                 <th>세부 유형</th>
@@ -325,11 +403,16 @@ export default function AdminDashboard() {
 
             <tbody>
               {requests.map((r) => (
-                <tr key={r.id}>
+                <tr
+                  key={r.id}
+                  className={selectedRequests.includes(r.id) ? "selected-row" : ""}
+                >
                   <td data-label="선택">
                     <input
                       type="checkbox"
                       checked={selectedRequests.includes(r.id)}
+                      disabled={deletingRequests}
+                      aria-label={`${r.shortId ?? r.id.slice(0, 6).toUpperCase()} 상담 신청 선택`}
                       onChange={(e) => {
                         const checked = e.target.checked;
                         const currentIndex = requests.findIndex(
