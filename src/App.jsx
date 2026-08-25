@@ -1,189 +1,266 @@
+// src/App.jsx
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { auth } from "./firebase";
+
+// Auth
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import AdminSupport from "./pages/admin/AdminSupport";
+// Admin
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import ConsultationDetail from "./pages/admin/ConsultationDetail";
+import AdminNotice from "./pages/admin/AdminNotice";
+import Adminusers from "./pages/admin/users";
+// Counselor
+import CounselorDashboard from "./pages/counselor/CounselorDashboard";
+import CounselorProfile from "./pages/counselor/CounselorProfile";
+import ChatRoom from "./pages/counselor/ChatRoom";
+import CommunityProfile from "./pages/community/CommunityProfile";
+// User
+import UserHome from "./pages/user/UserHome";
+
+// Community
+import CommunityList from "./pages/community/CommunityList";
+import CommunityDetail from "./pages/community/CommunityDetail";
+import CommunityWrite from "./pages/community/CommunityWrite";
+
+// Utils
+import useFcmToken from "./hooks/useFcmToken";
+import { withRole } from "./utils/withRole";
+
+// Firebase
+import { auth, db } from "./config/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "./firebase";
+import { doc, getDoc } from "firebase/firestore";
+import AdminCounselors from "./pages/admin/counselors";
+import KakaoCallback from "./pages/KakaoCallback";
+/* ===============================
+   🔐 보호된 페이지 고정 선언
+=============================== */
 
-import Login from "./Login";
-import Signup from "./Signup";
-import ChatPage from "./ChatPage";
-import AdminPage from "./AdminPage";
-import TypingText from "./TypingText";
+const Admin = withRole(AdminDashboard, "admin");
+const AdminNoticePage = withRole(AdminNotice, "admin");
+const AdminConsultDetail = withRole(
+  ConsultationDetail,
+  "admin"
+);
+const AdminCounselorsPage = withRole(
+  AdminCounselors,
+  "admin"
+);
+const AdminSupportPage = withRole(
+  AdminSupport,
+  "admin"
+);
+const Counselor = withRole(
+  CounselorDashboard,
+  "counselor"
+);
+const CounselorProfilePage = withRole(
+  CounselorProfile,
+  "counselor"
+);
+const CounselorChatPage = withRole(
+  ChatRoom,
+  ["admin", "counselor"]
+);
 
-export default function App() {
-  /* ===============================
-     🔐 Auth
-     =============================== */
+const User = withRole(UserHome, "user");
+
+const ExpertCommunityWrite = withRole(
+  CommunityWrite,
+  "expert"
+);
+
+function App() {
   const [user, setUser] = useState(null);
-  const [loadingUser, setLoadingUser] = useState(true);
+  const [role, setRole] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [roleLoading, setRoleLoading] = useState(false);
+const isKakaoCallback =
+  window.location.pathname === "/auth/kakao/callback";
+ /* ===============================
+   🔥 1️⃣ Auth 상태 관리
+================================ */
+useEffect(() => {
+  const unsub = onAuthStateChanged(auth, (u) => {
+    setUser(u);
+    setAuthLoading(false);
+  });
 
-  /* ===============================
-     👑 Role
-     =============================== */
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [loadingRole, setLoadingRole] = useState(true);
+  return () => unsub();
+}, []);
 
-  /* ===============================
-     🌍 Global Access
-     =============================== */
-  const [globalEnabled, setGlobalEnabled] = useState(true);
-  const [loadingGlobal, setLoadingGlobal] = useState(true);
 
-  /* ===============================
-     📄 Page
-     =============================== */
-  const [page, setPage] = useState("login");
+/* ===============================
+   🔥 2️⃣ 로그인 후 role 로딩
+================================ */
+useEffect(() => {
+  if (!user?.uid) {
+    setRole(null);
+    return;
+  }
 
-  /* ===============================
-     🔐 Auth 상태 구독
-     =============================== */
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoadingUser(false);
+  const loadRole = async () => {
+    try {
+      setRoleLoading(true);
 
-      if (!u) {
-        setIsAdmin(false);
-        setLoadingRole(false);
+      const snap = await getDoc(doc(db, "users", user.uid));
+
+      if (snap.exists()) {
+        const r = snap.data().role;
+        setRole(r);
+      } else {
+        setRole(null);
       }
-    });
+    } catch (err) {
+      console.error("🔥 role 로딩 실패:", err);
+      setRole(null);
+    } finally {
+      setRoleLoading(false);
+    }
+  };
 
-    return () => unsub();
+  loadRole();
+}, [user]);
+  /* ===============================
+     🔥 3️⃣ Service Worker 등록
+  =============================== */
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/firebase-messaging-sw.js")
+        .then((reg) =>
+          console.log("🔥 SW registered:", reg.scope)
+        )
+        .catch((err) =>
+          console.error("❌ SW registration failed:", err)
+        );
+    }
   }, []);
 
   /* ===============================
-     👑 Role 구독
-     =============================== */
-  useEffect(() => {
-    if (!user?.uid) return;
-
-    const ref = doc(db, "users", user.uid);
-
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        setIsAdmin(snap.exists() && snap.data()?.role === "admin");
-        setLoadingRole(false);
-      },
-      () => {
-        setIsAdmin(false);
-        setLoadingRole(false);
-      }
-    );
-
-    return () => unsub();
-  }, [user?.uid]);
-
-  /* ===============================
-     🌍 Global Access 구독 (핵심)
-     =============================== */
-  useEffect(() => {
-    if (loadingUser) return;
-
-    if (!user?.uid) {
-      setGlobalEnabled(true);
-      setLoadingGlobal(false);
-      return;
-    }
-
-    setLoadingGlobal(true);
-
-    const ref = doc(db, "system", "globalAccess");
-
-    const unsub = onSnapshot(
-      ref,
-      (snap) => {
-        if (!snap.exists()) {
-          // 문서 없으면 기본 허용
-          setGlobalEnabled(true);
-        } else {
-          setGlobalEnabled(Boolean(snap.data()?.enabled));
+     🔔 FCM 토큰 저장
+  =============================== */
+  useFcmToken(
+    user && role
+      ? {
+          uid: user.uid,
+          role,
         }
-        setLoadingGlobal(false);
-      },
-      (err) => {
-        console.error("🔥 globalAccess error:", err);
-        // ❗ 에러 나도 UX는 진행
-        setGlobalEnabled(true);
-        setLoadingGlobal(false);
-      }
-    );
-
-    return () => unsub();
-  }, [loadingUser, user?.uid]);
+      : null
+  );
 
   /* ===============================
-     ⏳ 전역 로딩
-     =============================== */
-  if (loadingUser || loadingRole || loadingGlobal) {
-    return (
-      <div className="w-screen h-screen flex items-center justify-center">
-        🔄 상태 확인 중…
-      </div>
-    );
-  }
-
-  /* ===============================
-     🚫 로그인 안 됨
-     =============================== */
-  if (!user) {
-    return page === "login" ? (
-      <Login
-        goSignup={() => setPage("signup")}
-        onFinishLogin={() => setPage("intro")}
-      />
-    ) : (
-      <Signup goLogin={() => setPage("login")} />
-    );
-  }
-
-  /* ===============================
-     ⛔ 전역 차단 (관리자 제외)
-     =============================== */
-  if (globalEnabled === false && !isAdmin) {
-    return (
-      <div className="w-screen h-screen flex items-center justify-center bg-black text-white">
-        <div className="text-center">
-          <h2 className="text-xl font-bold mb-2">⛔ 서비스 점검 중</h2>
-          <p className="text-gray-400">
-            현재 관리자가 전체 접근을 제한했습니다.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  /* ===============================
-     🎬 Intro
-     =============================== */
-  if (page === "intro") {
-    return (
-      <div className="w-screen h-screen flex items-center justify-center bg-black">
-        <TypingText
-          text="Here, Ever Reliable & Open"
-          size="xl"
-          onComplete={() => setPage("main")}
-        />
-      </div>
-    );
-  }
-
-  /* ===============================
-     🛠 Admin
-     =============================== */
-  if (page === "admin" && isAdmin) {
-    return <AdminPage goMain={() => setPage("main")} />;
-  }
-
-  /* ===============================
-     💬 Main
-     =============================== */
+     🔄 로딩 처리
+  =============================== */
+  if (!isKakaoCallback && (authLoading || (user && roleLoading))) {
   return (
-    <ChatPage
-  user={user}
-  isAdmin={isAdmin}
-  goAdmin={isAdmin ? () => setPage("admin") : null}
-/>
-
+    <div className="loading-screen">
+      🔄 정보를 불러오는 중입니다...
+    </div>
   );
 }
+
+  return (
+    <>
+     
+
+      <BrowserRouter>
+
+        <Routes>
+  {/* Auth */}
+  <Route path="/" element={<Login />} />
+  <Route path="/login" element={<Login />} />
+  <Route path="/signup" element={<Signup />} />
+<Route
+  path="/auth/kakao/callback"
+  element={<KakaoCallback />}
+/>
+  {/* Admin */}
+  <Route
+    path="/admin"
+    element={<Admin user={user} role={role} />}
+  />
+  <Route
+  path="/admin/support"
+  element={<AdminSupportPage user={user} role={role} />}
+/>
+  <Route
+    path="/admin/consult/:id"
+    element={<AdminConsultDetail user={user} role={role} />}
+  />
+  <Route
+    path="/admin/notice"
+    element={<AdminNoticePage user={user} role={role} />}
+  />
+  <Route path="/admin/users" element={<Adminusers user={user} role={role}/>}/>
+  <Route
+  path="/admin/counselors"
+  element={<AdminCounselorsPage user={user} role={role} />}
+/>
+
+  {/* Counselor */}
+  <Route
+    path="/counselor/dashboard"
+    element={<Counselor user={user} role={role} />}
+  />
+  <Route
+    path="/counselor/profile"
+    element={<CounselorProfilePage user={user} role={role} />}
+  />
+  <Route
+    path="/counselor/chat/:id"
+    element={<CounselorChatPage user={user} role={role} />}
+  />
+
+  {/* User */}
+  <Route
+    path="/home"
+    element={<User user={user} role={role} />}
+  />
+
+  {/* Community */}
+  <Route
+    path="/community"
+    element={<CommunityList />}
+  />
+  <Route
+    path="/community/write"
+    element={<ExpertCommunityWrite user={user} role={role} />}
+  />
+  <Route
+    path="/community/:id"
+    element={<CommunityDetail />}
+  />
+  <Route
+  path="/community/profile"
+  element={<CommunityProfile user={user} role={role} />}
+/>
+
+  {/* 403 */}
+  <Route
+    path="/403"
+    element={
+      <div style={{ padding: 40 }}>
+        🚫 접근 권한이 없습니다.
+      </div>
+    }
+  />
+
+  {/* 404 */}
+  <Route
+    path="*"
+    element={
+      <div style={{ padding: 40 }}>
+        🚫 페이지를 찾을 수 없습니다.
+      </div>
+    }
+  />
+</Routes>
+      </BrowserRouter>
+    </>
+  );
+}
+
+export default App;

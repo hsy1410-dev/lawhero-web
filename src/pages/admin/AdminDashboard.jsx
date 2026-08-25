@@ -36,90 +36,39 @@ export default function AdminDashboard() {
   const [assignedRequestsLoading, setAssignedRequestsLoading] = useState(true);
   const [requests, setRequests] = useState([]);
   const [counselors, setCounselors] = useState([]);
-  const [adminType, setAdminType] = useState(null);
-  const [loadingAdminType, setLoadingAdminType] = useState(true);
 
   const [selectedRequests, setSelectedRequests] = useState([]);
   const [selectedCounselors, setSelectedCounselors] = useState([]);
   const [deletingRequests, setDeletingRequests] = useState(false);
 
   /* ------------------------------------------------------------------
-      ⭐ 현재 로그인 관리자 타입 불러오기
+      오늘 배정된 전체 상담 수
   ------------------------------------------------------------------ */
   useEffect(() => {
-    const loadAdminType = async () => {
-      try {
-        const user = auth.currentUser;
-
-        if (!user) {
-          alert("로그인이 필요합니다.");
-          nav("/login");
-          return;
-        }
-
-        const userRef = doc(db, "users", user.uid);
-        const userSnap = await getDoc(userRef);
-
-        if (!userSnap.exists()) {
-          alert("관리자 정보를 찾을 수 없습니다.");
-          return;
-        }
-
-        const userData = userSnap.data();
-
-        if (userData.role !== "admin") {
-          alert("관리자 계정이 아닙니다.");
-          return;
-        }
-
-        setAdminType(userData.adminType ?? "general");
-      } catch (err) {
-        console.error("관리자 타입 조회 실패:", err);
-        alert("관리자 정보를 불러오지 못했습니다.");
-      } finally {
-        setLoadingAdminType(false);
-      }
-    };
-
-    loadAdminType();
-  }, [nav]);
-
-  /* ------------------------------------------------------------------
-      ⭐ 오늘 배정된 상담 수
-      - 현재 관리자 타입 기준으로만 카운트
-  ------------------------------------------------------------------ */
-  useEffect(() => {
-    if (!adminType) return;
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const q = query(
       collection(db, "consult_requests"),
       where("status", "==", "assigned"),
-      where("adminTarget", "==", adminType),
       where("createdAt", ">=", Timestamp.fromDate(today))
     );
 
     return onSnapshot(q, (snap) => {
       setAssignedCount(snap.docs.length);
     });
-  }, [adminType]);
+  }, []);
 
   /* ------------------------------------------------------------------
-      ⭐ 대기중 상담 목록
-      - 현재 관리자 타입 기준으로만 보기
+      전체 대기중 상담 목록
   ------------------------------------------------------------------ */
   useEffect(() => {
-    if (!adminType) return;
-
     let active = true;
     let snapshotSequence = 0;
 
     const q = query(
       collection(db, "consult_requests"),
       where("status", "==", "waiting"),
-      where("adminTarget", "==", adminType),
       orderBy("createdAt", "desc")
     );
 
@@ -164,20 +113,17 @@ export default function AdminDashboard() {
       active = false;
       unsubscribe();
     };
-  }, [adminType]);
+  }, []);
 
   /* ------------------------------------------------------------------
       현재 배정된 상담 내역
   ------------------------------------------------------------------ */
   useEffect(() => {
-    if (!adminType) return;
-
     setAssignedRequestsLoading(true);
 
     const q = query(
       collection(db, "consult_requests"),
-      where("status", "==", "assigned"),
-      where("adminTarget", "==", adminType)
+      where("status", "==", "assigned")
     );
 
     return onSnapshot(
@@ -202,7 +148,7 @@ export default function AdminDashboard() {
         setAssignedRequestsLoading(false);
       }
     );
-  }, [adminType]);
+  }, []);
 
   /* ------------------------------------------------------------------
       ⭐ 상담사 리스트
@@ -366,16 +312,6 @@ export default function AdminDashboard() {
     setLastIndex(null);
   };
 
-  if (loadingAdminType) {
-    return (
-      <MainLayout title="관리자 대시보드">
-        <div className="section-box">
-          <p className="empty-text">관리자 정보를 불러오는 중입니다...</p>
-        </div>
-      </MainLayout>
-    );
-  }
-
   return (
     <MainLayout title="관리자 대시보드">
       {/* 요약 카드 */}
@@ -396,10 +332,8 @@ export default function AdminDashboard() {
         </div>
 
         <div className="admin-card">
-          <h3>내 담당 유형</h3>
-          <p className="big-number">
-            {adminType === "special" ? "특수" : "일반"}
-          </p>
+          <h3>관리자 권한</h3>
+          <p className="big-number">전체</p>
         </div>
       </div>
 
@@ -425,9 +359,7 @@ export default function AdminDashboard() {
 
       {/* 상담 요청 리스트 */}
       <section className="section-box">
-        <h2 className="section-title">
-          배정 대기중 상담 {adminType === "special" ? "(특수)" : "(일반)"}
-        </h2>
+        <h2 className="section-title">배정 대기중 상담</h2>
 
         {requests.length === 0 ? (
           <p className="empty-text">대기중인 상담이 없습니다.</p>
@@ -536,9 +468,7 @@ export default function AdminDashboard() {
 
       {/* 현재 배정된 상담 내역 */}
       <section className="section-box">
-        <h2 className="section-title">
-          배정된 상담 내역 {adminType === "special" ? "(특수)" : "(일반)"}
-        </h2>
+        <h2 className="section-title">배정된 상담 내역</h2>
 
         {assignedRequestsLoading ? (
           <p className="empty-text">배정 내역을 불러오는 중입니다...</p>

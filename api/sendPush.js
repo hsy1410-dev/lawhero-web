@@ -335,14 +335,9 @@ export default async function handler(req, res) {
         break;
 
       case "consult": {
-        if (!adminTarget) {
-          return res.status(400).json({ error: "adminTarget required" });
-        }
-
         const adminUsers = await db
           .collection("users")
           .where("role", "==", "admin")
-          .where("adminType", "==", adminTarget)
           .get();
 
         for (const doc of adminUsers.docs) {
@@ -351,10 +346,11 @@ export default async function handler(req, res) {
           tokens.push(...userTokens);
         }
 
-        title =
-          adminTarget === "special"
-            ? "📥 새 특수 상담 요청"
-            : "📥 새 일반 상담 요청";
+        title = adminTarget === "special"
+          ? "📥 새 특수 상담 요청"
+          : adminTarget === "general"
+            ? "📥 새 일반 상담 요청"
+            : "📥 새 상담 요청";
         break;
       }
 

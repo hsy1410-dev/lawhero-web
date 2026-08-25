@@ -61,7 +61,6 @@ export default function AdminUsers({ role }) {
           id: staffDoc.id,
           ...staffDoc.data(),
           role: staffDoc.data().role || "user",
-          adminType: staffDoc.data().adminType || "",
         }))
         .filter((user) => user.role === targetRole);
 
@@ -128,30 +127,12 @@ export default function AdminUsers({ role }) {
 
   const changeRole = async (uid, newRole) => {
     try {
-      const updateData = { role: newRole };
-      if (newRole !== "admin") updateData.adminType = null;
-
-      await updateDoc(doc(db, "users", uid), updateData);
+      await updateDoc(doc(db, "users", uid), { role: newRole });
       setStaffUsers((prev) => prev.filter((user) => user.id !== uid));
       alert("권한이 변경되었습니다.");
     } catch (error) {
       console.error(error);
       alert("권한 변경 실패");
-    }
-  };
-
-  const changeAdminType = async (uid, newAdminType) => {
-    try {
-      await updateDoc(doc(db, "users", uid), { adminType: newAdminType });
-      setStaffUsers((prev) =>
-        prev.map((user) =>
-          user.id === uid ? { ...user, adminType: newAdminType } : user
-        )
-      );
-      alert("관리자 유형이 변경되었습니다.");
-    } catch (error) {
-      console.error(error);
-      alert("관리자 유형 변경 실패");
     }
   };
 
@@ -290,13 +271,6 @@ export default function AdminUsers({ role }) {
                     <option value="expert">expert</option>
                     <option value="user">user</option>
                   </select>
-
-                  {user.role === "admin" && (
-                    <select value={user.adminType || "general"} onChange={(event) => changeAdminType(user.id, event.target.value)}>
-                      <option value="general">일반 관리자</option>
-                      <option value="special">특수 관리자</option>
-                    </select>
-                  )}
 
                   <button type="button" className="danger-btn" onClick={() => deleteStaffUser(user.id)}>
                     삭제
