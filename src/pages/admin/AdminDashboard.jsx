@@ -9,8 +9,7 @@ import {
   Timestamp,
   where,
   serverTimestamp,
-  increment,
-  arrayUnion,
+  setDoc,
   writeBatch,
 } from "firebase/firestore";
 
@@ -18,9 +17,13 @@ import { auth, db } from "../../config/firebase";
 import MainLayout from "../../layouts/MainLayout";
 import "../../styles/admin.css";
 import { useNavigate } from "react-router-dom";
-import { sendPush } from "../../utils/sendPush";
 import {
-  getApplicationChannel,
+  assignWaitingConsultation,
+  AUTO_ASSIGNMENT_SETTINGS_REF,
+  isAutoAssignableCounselor,
+  notifyAssignedCounselor,
+} from "../../utils/assignment";
+import {
   getApplicationChannelLabel,
   getConsultationPreview,
   getConsultationUserId,
@@ -40,6 +43,10 @@ export default function AdminDashboard() {
   const [selectedRequests, setSelectedRequests] = useState([]);
   const [selectedCounselors, setSelectedCounselors] = useState([]);
   const [deletingRequests, setDeletingRequests] = useState(false);
+  const [autoAssignmentEnabled, setAutoAssignmentEnabled] = useState(false);
+  const [autoAssignmentLoading, setAutoAssignmentLoading] = useState(true);
+  const [autoAssignmentSaving, setAutoAssignmentSaving] = useState(false);
+  const [autoAssignmentError, setAutoAssignmentError] = useState("");
 
   /* ------------------------------------------------------------------
       오늘 배정된 전체 상담 수
@@ -57,6 +64,29 @@ export default function AdminDashboard() {
     return onSnapshot(q, (snap) => {
       setAssignedCount(snap.docs.length);
     });
+  }, []);
+
+  /* ------------------------------------------------------------------
+      자동배정 모드 설정
+  ------------------------------------------------------------------ */
+  useEffect(() => {
+    setAutoAssignmentLoading(true);
+
+    return onSnapshot(
+      AUTO_ASSIGNMENT_SETTINGS_REF,
+      (snapshot) => {
+        setAutoAssignmentEnabled(
+          snapshot.exists() && snapshot.data().enabled === true
+        );
+        setAutoAssignmentError("");
+        setAutoAssignmentLoading(false);
+      },
+      (error) => {
+        console.error("자동배정 설정 조회 실패:", error);
+        setAutoAssignmentError("자동배정 설정을 불러오지 못했습니다.");
+        setAutoAssignmentLoading(false);
+      }
+    );
   }, []);
 
   /* ------------------------------------------------------------------
@@ -177,16 +207,23 @@ export default function AdminDashboard() {
       return;
     }
 
-    try {
-      for (const requestId of selectedRequests) {
-        const counselorId =
-          selectedCounselors[
-            Math.floor(Math.random() * selectedCounselors.length)
-          ];
-        const request = requests.find((item) => item.id === requestId);
-        const counselor = counselors.find((item) => item.id === counselorId);
+    const counselorPool = counselors.filter(
+      (counselor) =>
+        selectedCounselors.includes(counselor.id) &&
+        isAutoAssignableCounselor(counselor)
+    );
 
-        if (!request || !counselor) continue;
+    if (counselorPool.length === 0) {
+      alert("자동 배정 가능한 상담사를 선택하세요");
+      return;
+    }
+
+    try {
+      let assignedTotal = 0;
+
+      for (const requestId of selectedRequests) {
+        const request = requests.find((item) => item.id === requestId);
+        if (!request) continue;
 
         const requestUserId = getConsultationUserId(request);
         if (!requestUserId) {
@@ -194,69 +231,30 @@ export default function AdminDashboard() {
           continue;
         }
 
-        const requestSource = getApplicationChannel(request);
-
-        const roomRef = doc(collection(db, "chat_rooms"));
-        const assignedAt = Timestamp.now();
         const assignedBy = auth.currentUser?.uid ?? "auto";
-        const batch = writeBatch(db);
-
-        batch.set(roomRef, {
-          clientId: requestUserId,
-          counselorId,
-          users: [requestUserId, counselorId],
+        const result = await assignWaitingConsultation({
           requestId,
-          shortId: request.shortId ?? requestId.slice(0, 6).toUpperCase(),
-          category: request.category ?? "법률 상담",
-          applicantPhone: request.applicantPhone ?? "",
-          ...(requestSource !== "unknown" ? { requestSource } : {}),
-          status: "assigned",
-          lastMessage: "",
-          lastMessageAt: null,
-          createdAt: serverTimestamp(),
-        });
-
-        batch.update(doc(db, "consult_requests", requestId), {
-          status: "assigned",
-          counselorId,
-          roomId: roomRef.id,
-          assignedCounselor: {
-            id: counselorId,
-            nickname: counselor.nickname ?? "",
-            realName: counselor.realName ?? "",
-          },
-          assignedAt: serverTimestamp(),
+          request,
+          counselors: counselorPool,
           assignedBy,
-          assignmentHistory: arrayUnion({
-            action: "assigned",
-            counselorId,
-            counselorNickname: counselor.nickname ?? counselor.realName ?? "",
-            performedBy: assignedBy,
-            at: assignedAt,
-          }),
+          assignmentMode: "bulk",
         });
 
-        batch.update(doc(db, "users", counselorId), {
-          assignedOpenCount: increment(1),
-        });
-
-        await batch.commit();
+        if (!result.assigned) continue;
+        assignedTotal += 1;
 
         try {
-          await sendPush({
-            type: "assign",
-            counselorUid: counselorId,
-            consultId: requestId,
-            message: `새 상담이 배정되었습니다. 상담코드: ${
-              request.shortId ?? requestId.slice(0, 6).toUpperCase()
-            }`,
-          });
+          await notifyAssignedCounselor(requestId, result);
         } catch (pushError) {
           console.warn(`상담 요청 ${requestId} 배정 알림 발송 실패:`, pushError);
         }
       }
 
-      alert("자동 배정 완료!");
+      alert(
+        assignedTotal > 0
+          ? `상담 ${assignedTotal}건을 배정했습니다.`
+          : "선택한 상담이 이미 처리되었거나 배정할 수 없습니다."
+      );
       setSelectedRequests([]);
     } catch (err) {
       console.error(err);
@@ -301,9 +299,44 @@ export default function AdminDashboard() {
     }
   };
 
+  const toggleAutoAssignment = async () => {
+    if (autoAssignmentLoading || autoAssignmentSaving) return;
+
+    const nextEnabled = !autoAssignmentEnabled;
+    const availableCounselors = counselors.filter(isAutoAssignableCounselor);
+
+    if (nextEnabled && availableCounselors.length === 0) {
+      alert("자동배정 가능한 상담사가 없습니다. 상담사를 먼저 등록해 주세요.");
+      return;
+    }
+
+    setAutoAssignmentSaving(true);
+    setAutoAssignmentError("");
+
+    try {
+      await setDoc(
+        AUTO_ASSIGNMENT_SETTINGS_REF,
+        {
+          enabled: nextEnabled,
+          updatedAt: serverTimestamp(),
+          updatedBy: auth.currentUser?.uid ?? "admin",
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      console.error("자동배정 설정 저장 실패:", error);
+      setAutoAssignmentError("설정을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setAutoAssignmentSaving(false);
+    }
+  };
+
   const allRequestsSelected =
     requests.length > 0 &&
     requests.every((request) => selectedRequests.includes(request.id));
+  const autoAssignableCounselorCount = counselors.filter(
+    isAutoAssignableCounselor
+  ).length;
 
   const toggleAllRequests = () => {
     setSelectedRequests(
@@ -336,6 +369,53 @@ export default function AdminDashboard() {
           <p className="big-number">전체</p>
         </div>
       </div>
+
+      <section
+        className={`auto-assignment-panel ${
+          autoAssignmentEnabled ? "enabled" : ""
+        }`}
+        aria-labelledby="auto-assignment-title"
+      >
+        <div className="auto-assignment-copy">
+          <span className="auto-assignment-kicker">실시간 배정</span>
+          <h2 id="auto-assignment-title">신규 상담 자동배정</h2>
+          <p>
+            모드를 켜면 대기중인 신규 상담을 진행 건수가 가장 적은 상담사에게
+            순서대로 배정합니다.
+          </p>
+          <span className="auto-assignment-meta">
+            배정 가능 상담사 {autoAssignableCounselorCount}명 · 설정은 새로고침 후에도 유지됩니다.
+          </span>
+          {autoAssignmentError && (
+            <span className="auto-assignment-error" role="alert">
+              {autoAssignmentError}
+            </span>
+          )}
+        </div>
+
+        <div className="auto-assignment-control">
+          <strong>
+            {autoAssignmentLoading
+              ? "설정 확인 중"
+              : autoAssignmentSaving
+                ? "저장 중"
+                : autoAssignmentEnabled
+                  ? "자동배정 ON"
+                  : "자동배정 OFF"}
+          </strong>
+          <button
+            type="button"
+            className="auto-assignment-switch"
+            role="switch"
+            aria-checked={autoAssignmentEnabled}
+            aria-label="신규 상담 자동배정 모드"
+            disabled={autoAssignmentLoading || autoAssignmentSaving}
+            onClick={toggleAutoAssignment}
+          >
+            <span />
+          </button>
+        </div>
+      </section>
 
       <div className="consult-action-bar">
         <span>{selectedRequests.length}건 선택됨</span>

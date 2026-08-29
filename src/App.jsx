@@ -26,6 +26,7 @@ import CommunityWrite from "./pages/community/CommunityWrite";
 
 // Utils
 import useFcmToken from "./hooks/useFcmToken";
+import useAutoAssignment from "./hooks/useAutoAssignment";
 import { withRole } from "./utils/withRole";
 
 // Firebase
@@ -150,6 +151,11 @@ useEffect(() => {
         }
       : null
   );
+
+  useAutoAssignment({
+    adminUid: user?.uid,
+    isAdmin: role === "admin",
+  });
 
   /* ===============================
      🔄 로딩 처리

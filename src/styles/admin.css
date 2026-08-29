@@ -47,6 +47,113 @@
   padding: 10px;
 }
 
+/* ---- 신규 상담 자동배정 ---- */
+.auto-assignment-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card-bg);
+  box-shadow: 0 4px 16px var(--shadow);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.auto-assignment-panel.enabled {
+  border-color: #16a34a;
+  box-shadow: 0 4px 18px color-mix(in srgb, #16a34a 18%, transparent);
+}
+
+.auto-assignment-copy {
+  min-width: 0;
+}
+
+.auto-assignment-kicker {
+  display: inline-block;
+  margin-bottom: 5px;
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.auto-assignment-copy h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 20px;
+}
+
+.auto-assignment-copy p {
+  margin: 8px 0 5px;
+  color: var(--subtext);
+  line-height: 1.5;
+}
+
+.auto-assignment-meta,
+.auto-assignment-error {
+  display: block;
+  color: var(--subtext);
+  font-size: 13px;
+}
+
+.auto-assignment-error {
+  margin-top: 7px;
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.auto-assignment-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.auto-assignment-control strong {
+  color: var(--text);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.auto-assignment-switch {
+  position: relative;
+  width: 58px;
+  height: 32px;
+  padding: 3px;
+  border: 0;
+  border-radius: 999px;
+  background: #9ca3af;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.auto-assignment-switch[aria-checked="true"] {
+  background: #16a34a;
+}
+
+.auto-assignment-switch:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.auto-assignment-switch span {
+  display: block;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+  transform: translateX(0);
+  transition: transform 0.2s;
+}
+
+.auto-assignment-switch[aria-checked="true"] span {
+  transform: translateX(26px);
+}
+
 .consult-action-bar {
   display: flex;
   align-items: center;
@@ -198,6 +305,17 @@
 
   .section-title {
     font-size: 18px;
+  }
+
+  .auto-assignment-panel {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .auto-assignment-control {
+    justify-content: space-between;
   }
 
   .consult-action-bar {

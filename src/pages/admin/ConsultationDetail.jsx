@@ -19,6 +19,10 @@ import MainLayout from "../../layouts/MainLayout";
 import "../../styles/adminDetail.css";
 import { sendPush } from "../../utils/sendPush";
 import {
+  assignWaitingConsultation,
+  notifyAssignedCounselor,
+} from "../../utils/assignment";
+import {
   getApplicationChannel,
   getApplicationChannelLabel,
   getConsultationText,
@@ -95,67 +99,37 @@ export default function ConsultationDetail() {
     const requestUserId = getConsultationUserId(data);
     if (!requestUserId) return alert("상담 신청자의 UID를 찾을 수 없습니다.");
 
-    const requestSource = getApplicationChannel(data);
     const assignedBy = auth.currentUser?.uid ?? "admin";
-    const assignedAt = Timestamp.now();
 
     try {
       setIsSaving(true);
 
-      const roomRef = doc(collection(db, "chat_rooms"));
-      const batch = writeBatch(db);
-
-      batch.set(roomRef, {
-        clientId: requestUserId,
-        counselorId: selectedCounselor.id,
-        users: [requestUserId, selectedCounselor.id],
+      const result = await assignWaitingConsultation({
         requestId: id,
-        shortId: data.shortId ?? id.slice(0, 6).toUpperCase(),
-        category: data.category ?? "법률 상담",
-        applicantPhone: getPhoneNumber(appUser, data),
-        ...(requestSource !== "unknown" ? { requestSource } : {}),
-        status: "assigned",
-        lastMessage: "",
-        lastMessageAt: null,
-        createdAt: serverTimestamp(),
-      });
-
-      batch.update(doc(db, "consult_requests", id), {
-        status: "assigned",
-        counselorId: selectedCounselor.id,
-        assignedAt: serverTimestamp(),
-        assignedBy,
-        roomId: roomRef.id,
-        assignedCounselor: {
-          id: selectedCounselor.id,
-          nickname: selectedCounselor.nickname ?? "",
-          realName: selectedCounselor.realName ?? "",
+        request: {
+          ...data,
+          applicantPhone: getPhoneNumber(appUser, data),
         },
-        assignmentHistory: arrayUnion({
-          action: "assigned",
-          counselorId: selectedCounselor.id,
-          counselorNickname:
-            selectedCounselor.nickname ?? selectedCounselor.realName ?? "",
-          performedBy: assignedBy,
-          at: assignedAt,
-        }),
+        counselors: [selectedCounselor],
+        assignedBy,
+        assignmentMode: "manual",
       });
 
-      batch.update(doc(db, "users", selectedCounselor.id), {
-        assignedOpenCount: increment(1),
-      });
-
-      await batch.commit();
+      if (!result.assigned) {
+        const latestSnapshot = await getDoc(doc(db, "consult_requests", id));
+        if (latestSnapshot.exists()) {
+          setData({ id: latestSnapshot.id, ...latestSnapshot.data() });
+        }
+        alert(
+          result.reason === "already-processed"
+            ? "이 상담은 이미 다른 관리자 또는 자동배정으로 처리되었습니다."
+            : "현재 이 상담을 배정할 수 없습니다."
+        );
+        return;
+      }
 
       try {
-        await sendPush({
-          type: "assign",
-          counselorUid: selectedCounselor.id,
-          consultId: id,
-          message: `새 상담이 배정되었습니다. 상담코드: ${
-            data.shortId ?? id.slice(0, 6).toUpperCase()
-          }`,
-        });
+        await notifyAssignedCounselor(id, result);
       } catch (pushError) {
         console.warn("배정 알림 발송 실패:", pushError);
       }
@@ -164,24 +138,26 @@ export default function ConsultationDetail() {
       setData((previous) => ({
         ...previous,
         status: "assigned",
-        counselorId: selectedCounselor.id,
-        assignedAt,
+        counselorId: result.counselor.id,
+        assignedAt: result.assignedAt,
         assignedBy,
-        roomId: roomRef.id,
+        assignmentMode: "manual",
+        roomId: result.roomId,
         assignedCounselor: {
-          id: selectedCounselor.id,
-          nickname: selectedCounselor.nickname ?? "",
-          realName: selectedCounselor.realName ?? "",
+          id: result.counselor.id,
+          nickname: result.counselor.nickname ?? "",
+          realName: result.counselor.realName ?? "",
         },
         assignmentHistory: [
           ...(previous.assignmentHistory ?? []),
           {
             action: "assigned",
-            counselorId: selectedCounselor.id,
+            assignmentMode: "manual",
+            counselorId: result.counselor.id,
             counselorNickname:
-              selectedCounselor.nickname ?? selectedCounselor.realName ?? "",
+              result.counselor.nickname ?? result.counselor.realName ?? "",
             performedBy: assignedBy,
-            at: assignedAt,
+            at: result.assignedAt,
           },
         ],
       }));

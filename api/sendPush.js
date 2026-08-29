@@ -16,6 +16,176 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
+function getConsultationUserId(consultation) {
+  return (
+    consultation?.userId ??
+    consultation?.clientId ??
+    consultation?.uid ??
+    consultation?.user?.uid ??
+    null
+  );
+}
+
+function getApplicantPhone(consultation) {
+  const phoneFields = [
+    "applicantPhone",
+    "phone",
+    "phoneNumber",
+    "mobile",
+    "mobilePhone",
+    "contactPhone",
+  ];
+
+  for (const field of phoneFields) {
+    const value = consultation?.[field];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number") return String(value);
+  }
+
+  return "";
+}
+
+function getRequestSource(consultation) {
+  const source =
+    consultation?.requestSource ??
+    consultation?.applicationSource ??
+    consultation?.applicationChannel ??
+    consultation?.source ??
+    consultation?.platform ??
+    "";
+
+  return typeof source === "string" && source.trim() ? source.trim() : null;
+}
+
+function timestampToMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  if (typeof value === "number") return value;
+  return 0;
+}
+
+function chooseAutoAssignmentCounselor(counselors) {
+  return [...counselors].sort((a, b) => {
+    const loadDifference =
+      Number(a.assignedOpenCount ?? 0) - Number(b.assignedOpenCount ?? 0);
+    if (loadDifference !== 0) return loadDifference;
+
+    const assignedTimeDifference =
+      timestampToMillis(a.lastAutoAssignedAt) -
+      timestampToMillis(b.lastAutoAssignedAt);
+    if (assignedTimeDifference !== 0) return assignedTimeDifference;
+
+    return a.id.localeCompare(b.id);
+  })[0];
+}
+
+async function autoAssignConsultation(consultId) {
+  if (!consultId) return { assigned: false, reason: "missing-consult-id" };
+
+  const settingsRef = db.collection("admin_settings").doc("auto_assignment");
+  const requestRef = db.collection("consult_requests").doc(consultId);
+  const roomRef = db.collection("chat_rooms").doc();
+
+  return db.runTransaction(async (transaction) => {
+    const [settingsSnap, requestSnap, counselorSnap] = await Promise.all([
+      transaction.get(settingsRef),
+      transaction.get(requestRef),
+      transaction.get(
+        db.collection("users").where("role", "==", "counselor")
+      ),
+    ]);
+
+    if (!settingsSnap.exists || settingsSnap.data()?.enabled !== true) {
+      return { assigned: false, reason: "mode-disabled" };
+    }
+
+    if (!requestSnap.exists) {
+      return { assigned: false, reason: "request-not-found" };
+    }
+
+    const request = requestSnap.data();
+    if (request.status !== "waiting") {
+      return { assigned: false, reason: "already-processed" };
+    }
+
+    const counselors = counselorSnap.docs
+      .map((counselorDoc) => ({
+        id: counselorDoc.id,
+        ...counselorDoc.data(),
+      }))
+      .filter(
+        (counselor) =>
+          counselor.disabled !== true && counselor.autoAssignmentEnabled !== false
+      );
+    const counselor = chooseAutoAssignmentCounselor(counselors);
+
+    if (!counselor) {
+      return { assigned: false, reason: "no-counselor" };
+    }
+
+    const clientId = getConsultationUserId(request);
+    if (!clientId) {
+      return { assigned: false, reason: "missing-client-id" };
+    }
+
+    const assignedAt = admin.firestore.Timestamp.now();
+    const assignedBy = settingsSnap.data()?.updatedBy ?? "automatic-system";
+    const counselorName = counselor.nickname ?? counselor.realName ?? "";
+    const requestSource = getRequestSource(request);
+    const shortId = request.shortId ?? consultId.slice(0, 6).toUpperCase();
+
+    transaction.set(roomRef, {
+      clientId,
+      counselorId: counselor.id,
+      users: [clientId, counselor.id],
+      requestId: consultId,
+      shortId,
+      category: request.category ?? "법률 상담",
+      applicantPhone: getApplicantPhone(request),
+      ...(requestSource ? { requestSource } : {}),
+      status: "assigned",
+      lastMessage: "",
+      lastMessageAt: null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    transaction.update(requestRef, {
+      status: "assigned",
+      counselorId: counselor.id,
+      roomId: roomRef.id,
+      assignedCounselor: {
+        id: counselor.id,
+        nickname: counselor.nickname ?? "",
+        realName: counselor.realName ?? "",
+      },
+      assignedAt: admin.firestore.FieldValue.serverTimestamp(),
+      assignedBy,
+      assignmentMode: "automatic",
+      assignmentHistory: admin.firestore.FieldValue.arrayUnion({
+        action: "assigned",
+        assignmentMode: "automatic",
+        counselorId: counselor.id,
+        counselorNickname: counselorName,
+        performedBy: assignedBy,
+        at: assignedAt,
+      }),
+    });
+
+    transaction.update(db.collection("users").doc(counselor.id), {
+      assignedOpenCount: admin.firestore.FieldValue.increment(1),
+      lastAutoAssignedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return {
+      assigned: true,
+      counselorId: counselor.id,
+      roomId: roomRef.id,
+      shortId,
+    };
+  });
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -309,13 +479,44 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "type & message required" });
     }
 
+    let notificationType = type;
+    let notificationMessage = message;
+    let notificationCounselorUid = counselorUid;
+    let autoAssignment = null;
+
+    if (type === "consult" && consultId) {
+      try {
+        autoAssignment = await autoAssignConsultation(consultId);
+
+        for (
+          let attempt = 0;
+          autoAssignment.reason === "request-not-found" && attempt < 2;
+          attempt += 1
+        ) {
+          await delay(250);
+          autoAssignment = await autoAssignConsultation(consultId);
+        }
+
+        if (autoAssignment.assigned) {
+          notificationType = "assign";
+          notificationCounselorUid = autoAssignment.counselorId;
+          notificationMessage = `새 상담이 자동 배정되었습니다. 상담코드: ${autoAssignment.shortId}`;
+        } else if (autoAssignment.reason === "already-processed") {
+          return res.json({ success: true, autoAssignment });
+        }
+      } catch (assignmentError) {
+        console.error(`상담 요청 ${consultId} 서버 자동배정 실패:`, assignmentError);
+        autoAssignment = { assigned: false, reason: "assignment-error" };
+      }
+    }
+
     let tokens = [];
     let title = "";
 
     /* =======================================================
        🔥 TYPE 분기
     ======================================================= */
-    switch (type) {
+    switch (notificationType) {
       case "chat":
         if (!targetUid) {
           return res.status(400).json({ error: "targetUid required" });
@@ -326,11 +527,11 @@ export default async function handler(req, res) {
         break;
 
       case "assign":
-        if (!counselorUid) {
+        if (!notificationCounselorUid) {
           return res.status(400).json({ error: "counselorUid required" });
         }
 
-        tokens = await getTokensByUid(counselorUid);
+        tokens = await getTokensByUid(notificationCounselorUid);
         title = "🧑‍⚖️ 상담 배정";
         break;
 
@@ -376,14 +577,14 @@ export default async function handler(req, res) {
 
     if (!tokens.length) {
       console.log("⚠️ 보낼 토큰 없음");
-      return res.json({ success: true });
+      return res.json({ success: true, autoAssignment });
     }
 
     tokens = [...new Set(tokens)];
     const { expo, web } = splitTokens(tokens);
 
     console.log(
-      `📊 ${type}${adminTarget ? `(${adminTarget})` : ""} → Expo:${expo.length}, Web:${web.length}`
+      `📊 ${notificationType}${adminTarget ? `(${adminTarget})` : ""} → Expo:${expo.length}, Web:${web.length}`
     );
 
     if (!expo.length && web.length) {
@@ -398,8 +599,8 @@ export default async function handler(req, res) {
       );
     }
 
-    const expoSummary = await sendExpoPush(expo, title, message, {
-      type,
+    const expoSummary = await sendExpoPush(expo, title, notificationMessage, {
+      type: notificationType,
       consultId,
       adminTarget,
     });
@@ -422,8 +623,8 @@ export default async function handler(req, res) {
       }
     }
 
-    const webSummary = await sendWebPush(web, title, message, {
-      type,
+    const webSummary = await sendWebPush(web, title, notificationMessage, {
+      type: notificationType,
       consultId,
       adminTarget,
     });
@@ -432,7 +633,7 @@ export default async function handler(req, res) {
       expoSummary.success + webSummary.success > 0;
 
     console.log("📦 sendPush summary:", {
-      type,
+      type: notificationType,
       adminTarget,
       expo: {
         requested: expoSummary.requested,
@@ -445,6 +646,7 @@ export default async function handler(req, res) {
 
     return res.json({
       success,
+      autoAssignment,
       summary: {
         tokens: {
           total: tokens.length,
