@@ -11,6 +11,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import ConsultationDetail from "./pages/admin/ConsultationDetail";
 import AdminNotice from "./pages/admin/AdminNotice";
 import Adminusers from "./pages/admin/users";
+import AdminLawyers from "./pages/admin/AdminLawyers";
 // Counselor
 import CounselorDashboard from "./pages/counselor/CounselorDashboard";
 import CounselorProfile from "./pages/counselor/CounselorProfile";
@@ -47,6 +48,10 @@ const AdminConsultDetail = withRole(
 );
 const AdminCounselorsPage = withRole(
   AdminCounselors,
+  "admin"
+);
+const AdminLawyersPage = withRole(
+  AdminLawyers,
   "admin"
 );
 const AdminSupportPage = withRole(
@@ -201,6 +206,10 @@ useEffect(() => {
     element={<AdminNoticePage user={user} role={role} />}
   />
   <Route path="/admin/users" element={<Adminusers user={user} role={role}/>}/>
+  <Route
+    path="/admin/lawyers"
+    element={<AdminLawyersPage user={user} role={role} />}
+  />
   <Route
   path="/admin/counselors"
   element={<AdminCounselorsPage user={user} role={role} />}

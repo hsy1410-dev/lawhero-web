@@ -7,7 +7,8 @@ export default function Sidebar({ role, isOpen = false, onClose = () => {} }) {
   const nav = useNavigate();
   const path = location.pathname;
 
-  const isActive = (route) => path.startsWith(route);
+  const isActive = (route) =>
+    route === "/admin" ? path === route : path.startsWith(route);
 
   const handleLogout = async () => {
     await auth.signOut();
@@ -43,6 +44,13 @@ console.log("🔥 Sidebar role:", role);
       onClick={onClose}
     >
       ⭐ 상담사 관리
+    </Link>
+    <Link
+      className={isActive("/admin/lawyers") ? "active" : ""}
+      to="/admin/lawyers"
+      onClick={onClose}
+    >
+      ⚖️ 변호사 관리
     </Link>
     <Link
       className={isActive("/admin/support") ? "active" : ""}
