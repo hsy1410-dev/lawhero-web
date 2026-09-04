@@ -75,6 +75,7 @@ export default function AdminLawyers() {
   const [successMessage, setSuccessMessage] = useState("");
   const [searchName, setSearchName] = useState("");
   const [searchRegion, setSearchRegion] = useState("");
+  const [searchOffice, setSearchOffice] = useState("");
   const [updatingId, setUpdatingId] = useState("");
   const formSectionRef = useRef(null);
 
@@ -110,13 +111,16 @@ export default function AdminLawyers() {
 
   const filteredLawyers = useMemo(() => {
     const normalizedName = searchName.trim().toLocaleLowerCase("ko");
+    const normalizedOffice = searchOffice.trim().toLocaleLowerCase("ko");
     return lawyers.filter((lawyer) => {
       const matchesName =
         !normalizedName || lawyer.name.toLocaleLowerCase("ko").includes(normalizedName);
       const matchesRegion = !searchRegion || lawyer.region === searchRegion;
-      return matchesName && matchesRegion;
+      const matchesOffice =
+        !normalizedOffice || lawyer.office.toLocaleLowerCase("ko").includes(normalizedOffice);
+      return matchesName && matchesRegion && matchesOffice;
     });
-  }, [lawyers, searchName, searchRegion]);
+  }, [lawyers, searchName, searchOffice, searchRegion]);
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
@@ -408,6 +412,15 @@ export default function AdminLawyers() {
                   <option key={region} value={region}>{region}</option>
                 ))}
               </select>
+            </label>
+            <label>
+              <span>사무실 검색</span>
+              <input
+                type="search"
+                value={searchOffice}
+                placeholder="법무법인·사무실명"
+                onChange={(event) => setSearchOffice(event.target.value)}
+              />
             </label>
             <span className="lawyer-search-result">검색 결과 {filteredLawyers.length}명</span>
           </div>

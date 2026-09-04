@@ -45,6 +45,83 @@ function getApplicantPhone(consultation) {
   return "";
 }
 
+function getConsultationText(consultation) {
+  const fields = [
+    "content",
+    "consultationContent",
+    "consultContent",
+    "message",
+    "description",
+    "details",
+    "question",
+    "requestText",
+    "consultation",
+  ];
+
+  for (const field of fields) {
+    const value = consultation?.[field];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (Array.isArray(value)) {
+      const joined = value
+        .filter((item) => typeof item === "string" && item.trim())
+        .join("\n")
+        .trim();
+      if (joined) return joined;
+    }
+  }
+
+  return "";
+}
+
+function getLinkedRoomId(consultation) {
+  const candidates = [
+    consultation?.roomId,
+    consultation?.chatRoomId,
+    consultation?.conversationId,
+    consultation?.room?.id,
+  ];
+
+  return (
+    candidates.find(
+      (value) =>
+        typeof value === "string" &&
+        value.trim() &&
+        !value.includes("/")
+    )?.trim() ?? null
+  );
+}
+
+function hasRoomActivity(room) {
+  return Boolean(
+    room?.lastMessage ||
+      room?.lastMessageAt ||
+      room?.lastSender ||
+      room?.messageCount
+  );
+}
+
+function chooseLinkedRoomId(snapshot) {
+  const reusableStatuses = ["waiting", "assignment_cancelled"];
+  const rooms = snapshot.docs.map((roomDoc) => ({
+    id: roomDoc.id,
+    ...roomDoc.data(),
+  }));
+
+  rooms.sort((a, b) => {
+    const statusDifference =
+      Number(reusableStatuses.includes(b.status)) -
+      Number(reusableStatuses.includes(a.status));
+    if (statusDifference !== 0) return statusDifference;
+
+    return (
+      (timestampToMillis(b.lastMessageAt) || timestampToMillis(b.createdAt)) -
+      (timestampToMillis(a.lastMessageAt) || timestampToMillis(a.createdAt))
+    );
+  });
+
+  return rooms[0]?.id ?? null;
+}
+
 function getRequestSource(consultation) {
   const source =
     consultation?.requestSource ??
@@ -85,14 +162,17 @@ async function autoAssignConsultation(consultId) {
 
   const settingsRef = db.collection("admin_settings").doc("auto_assignment");
   const requestRef = db.collection("consult_requests").doc(consultId);
-  const roomRef = db.collection("chat_rooms").doc();
+  const newRoomRef = db.collection("chat_rooms").doc();
 
   return db.runTransaction(async (transaction) => {
-    const [settingsSnap, requestSnap, counselorSnap] = await Promise.all([
+    const [settingsSnap, requestSnap, counselorSnap, linkedRoomsSnap] = await Promise.all([
       transaction.get(settingsRef),
       transaction.get(requestRef),
       transaction.get(
         db.collection("users").where("role", "==", "counselor")
+      ),
+      transaction.get(
+        db.collection("chat_rooms").where("requestId", "==", consultId)
       ),
     ]);
 
@@ -108,6 +188,14 @@ async function autoAssignConsultation(consultId) {
     if (request.status !== "waiting") {
       return { assigned: false, reason: "already-processed" };
     }
+
+    // 승인 전 고객이 사용하던 대기방을 재사용해 기존 messages를 유지한다.
+    const linkedRoomId = getLinkedRoomId(request);
+    const discoveredRoomId = chooseLinkedRoomId(linkedRoomsSnap);
+    const reusableRoomRef = db
+      .collection("chat_rooms")
+      .doc(linkedRoomId ?? discoveredRoomId ?? consultId);
+    const reusableRoomSnap = await transaction.get(reusableRoomRef);
 
     const counselors = counselorSnap.docs
       .map((counselorDoc) => ({
@@ -134,6 +222,21 @@ async function autoAssignConsultation(consultId) {
     const counselorName = counselor.nickname ?? counselor.realName ?? "";
     const requestSource = getRequestSource(request);
     const shortId = request.shortId ?? consultId.slice(0, 6).toUpperCase();
+    const roomRef =
+      linkedRoomId || reusableRoomSnap.exists
+        ? reusableRoomRef
+        : newRoomRef;
+    const existingRoom = reusableRoomSnap.exists
+      ? reusableRoomSnap.data()
+      : null;
+    const consultationText = getConsultationText(request);
+    const shouldSeedInitialMessage =
+      Boolean(consultationText) && !hasRoomActivity(existingRoom);
+    const initialMessageAt = request.createdAt ?? assignedAt;
+    const existingUnread =
+      existingRoom?.unread && typeof existingRoom.unread === "object"
+        ? existingRoom.unread
+        : {};
 
     transaction.set(roomRef, {
       clientId,
@@ -145,10 +248,45 @@ async function autoAssignConsultation(consultId) {
       applicantPhone: getApplicantPhone(request),
       ...(requestSource ? { requestSource } : {}),
       status: "assigned",
-      lastMessage: "",
-      lastMessageAt: null,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+      assignedAt: admin.firestore.FieldValue.serverTimestamp(),
+      unread: {
+        ...existingUnread,
+        [counselor.id]:
+          shouldSeedInitialMessage || hasRoomActivity(existingRoom)
+            ? Math.max(Number(existingUnread[counselor.id] ?? 0), 1)
+            : Number(existingUnread[counselor.id] ?? 0),
+      },
+      ...(!existingRoom
+        ? {
+            createdAt:
+              request.createdAt ??
+              admin.firestore.FieldValue.serverTimestamp(),
+            lastMessage: consultationText,
+            lastMessageAt: consultationText ? initialMessageAt : null,
+            ...(consultationText ? { lastSender: clientId } : {}),
+          }
+        : shouldSeedInitialMessage
+          ? {
+              lastMessage: consultationText,
+              lastMessageAt: initialMessageAt,
+              lastSender: clientId,
+            }
+          : {}),
+    }, { merge: true });
+
+    if (shouldSeedInitialMessage) {
+      transaction.set(
+        roomRef.collection("messages").doc("consultation-request"),
+        {
+          uid: clientId,
+          text: consultationText,
+          createdAt: initialMessageAt,
+          read: false,
+          source: "consultation_request",
+        },
+        { merge: true }
+      );
+    }
 
     transaction.update(requestRef, {
       status: "assigned",

@@ -1,19 +1,60 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   collection,
   doc,
   addDoc,
+  getDoc,
   onSnapshot,
-  orderBy,
-  query,
   serverTimestamp,
   updateDoc,
   increment,
 } from "firebase/firestore";
 import { auth, db } from "../../config/firebase";
 import "../../styles/chat.css";
+import { getConsultationText } from "../../utils/consultation";
 import { sendPush } from "../../utils/sendPush";
+
+function timestampToMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "number") return value;
+
+  const seconds = value.seconds ?? value._seconds;
+  if (typeof seconds === "number") return seconds * 1000;
+
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function getMessageSenderId(message) {
+  return (
+    message.uid ??
+    message.senderId ??
+    message.senderUid ??
+    message.authorId ??
+    null
+  );
+}
+
+function getMessageText(message) {
+  const value = message.text ?? message.message ?? message.content;
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return "";
+}
+
+function getMessageCreatedAt(message) {
+  return (
+    message.createdAt ??
+    message.sentAt ??
+    message.timestamp ??
+    message.updatedAt ??
+    null
+  );
+}
 
 export default function ChatRoom() {
   const { id } = useParams();
@@ -21,6 +62,7 @@ export default function ChatRoom() {
   const myUid = auth.currentUser?.uid;
 
   const [messages, setMessages] = useState([]);
+  const [consultationMessage, setConsultationMessage] = useState(null);
   const [room, setRoom] = useState(null);
   const [text, setText] = useState("");
 
@@ -55,25 +97,24 @@ export default function ChatRoom() {
   useEffect(() => {
     if (!id || !myUid || !room) return;
 
-    const q = query(
-      collection(db, "chat_rooms", id, "messages"),
-      orderBy("createdAt", "asc")
-    );
-
-    return onSnapshot(q, async (snap) => {
+    return onSnapshot(collection(db, "chat_rooms", id, "messages"), async (snap) => {
       const list = snap.docs
         .map((d) => ({
           id: d.id,
           ...d.data(),
+          createdAt: getMessageCreatedAt(d.data()),
         }))
-        .filter((m) => m.createdAt);
+        .sort(
+          (a, b) =>
+            timestampToMillis(a.createdAt) - timestampToMillis(b.createdAt)
+        );
 
       setMessages(list);
 
       /* 읽음 처리 */
       const unreadMessages = snap.docs.filter((docSnap) => {
         const msg = docSnap.data();
-        return msg.createdAt && !msg.read && msg.uid !== myUid;
+        return !msg.read && getMessageSenderId(msg) !== myUid;
       });
 
       if (unreadMessages.length > 0) {
@@ -93,6 +134,72 @@ export default function ChatRoom() {
       }, 50);
     });
   }, [id, myUid, room]);
+
+  /* 기존에 이미 분리된 방도 최소한 신청 당시 상담 내용은 복원해서 보여준다. */
+  useEffect(() => {
+    let active = true;
+
+    if (!room?.requestId) {
+      return () => {
+        active = false;
+      };
+    }
+
+    getDoc(doc(db, "consult_requests", room.requestId))
+      .then((snapshot) => {
+        if (!active || !snapshot.exists()) return;
+
+        const request = snapshot.data();
+        const requestText = getConsultationText(request);
+        setConsultationMessage(
+          requestText
+            ? {
+                id: "consultation-request-fallback",
+                requestId: room.requestId,
+                uid: room.clientId,
+                text: requestText,
+                createdAt: request.createdAt ?? room.createdAt ?? null,
+                read: true,
+                source: "consultation_request_fallback",
+              }
+            : null
+        );
+      })
+      .catch((error) => {
+        if (active) {
+          console.warn("상담 신청 내용 불러오기 실패:", error);
+          setConsultationMessage(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [room?.clientId, room?.createdAt, room?.requestId]);
+
+  const visibleMessages = useMemo(() => {
+    if (
+      !consultationMessage ||
+      consultationMessage.requestId !== room?.requestId
+    ) {
+      return messages;
+    }
+
+    const fallbackText = getMessageText(consultationMessage).trim();
+    const alreadyIncluded = messages.some(
+      (message) =>
+        message.source === "consultation_request" ||
+        (getMessageSenderId(message) === consultationMessage.uid &&
+          getMessageText(message).trim() === fallbackText)
+    );
+
+    if (alreadyIncluded) return messages;
+
+    return [...messages, consultationMessage].sort(
+      (a, b) =>
+        timestampToMillis(a.createdAt) - timestampToMillis(b.createdAt)
+    );
+  }, [consultationMessage, messages, room?.requestId]);
 
   /* ================= SEND MESSAGE ================= */
   const sendMessage = async () => {
@@ -153,23 +260,27 @@ export default function ChatRoom() {
 
   /* ================= DATE ================= */
   const isNewDay = (current, prev) => {
-    if (!current || !current.toDate) return false;
-    if (!prev || !prev.toDate) return true;
+    const currentMillis = timestampToMillis(current);
+    const previousMillis = timestampToMillis(prev);
+    if (!currentMillis) return false;
+    if (!previousMillis) return true;
 
-    const c = current.toDate();
-    const p = prev.toDate();
+    const c = new Date(currentMillis);
+    const p = new Date(previousMillis);
 
     return c.toDateString() !== p.toDateString();
   };
 
   const formatDate = (ts) => {
-    if (!ts || !ts.toDate) return "";
-    return ts.toDate().toLocaleDateString();
+    const millis = timestampToMillis(ts);
+    if (!millis) return "";
+    return new Date(millis).toLocaleDateString();
   };
 
   const formatTime = (ts) => {
-    if (!ts || !ts.toDate) return "";
-    return ts.toDate().toLocaleTimeString([], {
+    const millis = timestampToMillis(ts);
+    if (!millis) return "";
+    return new Date(millis).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -200,9 +311,9 @@ export default function ChatRoom() {
 
       {/* MESSAGES */}
       <div className="chat-messages modern">
-        {messages.map((msg, index) => {
-          const mine = msg.uid === myUid;
-          const prev = messages[index - 1];
+        {visibleMessages.map((msg, index) => {
+          const mine = getMessageSenderId(msg) === myUid;
+          const prev = visibleMessages[index - 1];
           const showDate = isNewDay(msg.createdAt, prev?.createdAt);
 
           return (
@@ -215,7 +326,7 @@ export default function ChatRoom() {
 
               <div className={`bubble-row ${mine ? "mine" : "other"}`}>
                 <div className="chat-bubble modern">
-                  <div className="bubble-text">{msg.text}</div>
+                  <div className="bubble-text">{getMessageText(msg)}</div>
 
                   <div className="bubble-meta">
                     <span className="bubble-time">

@@ -201,7 +201,6 @@ export default function ConsultationDetail() {
       batch.update(requestRef, {
         status: "waiting",
         counselorId: deleteField(),
-        roomId: deleteField(),
         assignedCounselor: deleteField(),
         assignedAt: deleteField(),
         assignedBy: deleteField(),
@@ -257,7 +256,6 @@ export default function ConsultationDetail() {
         ...previous,
         status: "waiting",
         counselorId: undefined,
-        roomId: undefined,
         assignedCounselor: undefined,
         assignedAt: undefined,
         assignedBy: undefined,
