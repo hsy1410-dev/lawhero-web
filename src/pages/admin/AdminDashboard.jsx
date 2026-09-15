@@ -41,7 +41,6 @@ export default function AdminDashboard() {
   const [counselors, setCounselors] = useState([]);
 
   const [selectedRequests, setSelectedRequests] = useState([]);
-  const [selectedCounselors, setSelectedCounselors] = useState([]);
   const [deletingRequests, setDeletingRequests] = useState(false);
   const [autoAssignmentEnabled, setAutoAssignmentEnabled] = useState(false);
   const [autoAssignmentLoading, setAutoAssignmentLoading] = useState(true);
@@ -182,8 +181,7 @@ export default function AdminDashboard() {
 
   /* ------------------------------------------------------------------
       ⭐ 상담사 리스트
-      - 일단 전체 상담사 표시
-      - 나중에 필요하면 special/general 별 필터 추가 가능
+      - 모든 상담사를 균등 배정 대상으로 표시
   ------------------------------------------------------------------ */
   useEffect(() => {
     const q = query(collection(db, "users"), where("role", "==", "counselor"));
@@ -202,19 +200,10 @@ export default function AdminDashboard() {
       return;
     }
 
-    if (selectedCounselors.length === 0) {
-      alert("상담사를 선택하세요");
-      return;
-    }
-
-    const counselorPool = counselors.filter(
-      (counselor) =>
-        selectedCounselors.includes(counselor.id) &&
-        isAutoAssignableCounselor(counselor)
-    );
+    const counselorPool = counselors.filter(isAutoAssignableCounselor);
 
     if (counselorPool.length === 0) {
-      alert("자동 배정 가능한 상담사를 선택하세요");
+      alert("등록된 상담사가 없습니다. 상담사를 먼저 등록해 주세요.");
       return;
     }
 
@@ -380,8 +369,8 @@ export default function AdminDashboard() {
           <span className="auto-assignment-kicker">실시간 배정</span>
           <h2 id="auto-assignment-title">신규 상담 자동배정</h2>
           <p>
-            모드를 켜면 대기중인 신규 상담을 진행 건수가 가장 적은 상담사에게
-            순서대로 배정합니다.
+            모드를 켜면 대기중인 신규 상담을 모든 상담사에게 한 건씩 순환 배정합니다.
+            상담사 수로 나눠떨어지지 않으면 배정 건수 차이는 최대 1건입니다.
           </p>
           <span className="auto-assignment-meta">
             배정 가능 상담사 {autoAssignableCounselorCount}명 · 설정은 새로고침 후에도 유지됩니다.
@@ -425,7 +414,7 @@ export default function AdminDashboard() {
           onClick={autoAssign}
           disabled={deletingRequests}
         >
-          선택 상담 자동 배정
+          선택 상담 전체 상담사 균등 배정
         </button>
         <button
           type="button"
@@ -608,20 +597,6 @@ export default function AdminDashboard() {
           <div className="lawyer-list">
             {counselors.map((c) => (
               <div className="lawyer-card" key={c.id}>
-                <input
-                  type="checkbox"
-                  checked={selectedCounselors.includes(c.id)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedCounselors((prev) => [...prev, c.id]);
-                    } else {
-                      setSelectedCounselors((prev) =>
-                        prev.filter((id) => id !== c.id)
-                      );
-                    }
-                  }}
-                />
-
                 <h3
                   style={{ cursor: "pointer" }}
                   onClick={() => nav(`/admin/counselor/${c.id}`)}

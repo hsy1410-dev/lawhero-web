@@ -1,4 +1,5 @@
 import admin from "firebase-admin";
+import { chooseRoundRobinCounselor } from "../src/utils/assignmentPolicy.js";
 
 /* =======================================================
    🔥 Firebase Admin 초기화
@@ -142,21 +143,6 @@ function timestampToMillis(value) {
   return 0;
 }
 
-function chooseAutoAssignmentCounselor(counselors) {
-  return [...counselors].sort((a, b) => {
-    const loadDifference =
-      Number(a.assignedOpenCount ?? 0) - Number(b.assignedOpenCount ?? 0);
-    if (loadDifference !== 0) return loadDifference;
-
-    const assignedTimeDifference =
-      timestampToMillis(a.lastAutoAssignedAt) -
-      timestampToMillis(b.lastAutoAssignedAt);
-    if (assignedTimeDifference !== 0) return assignedTimeDifference;
-
-    return a.id.localeCompare(b.id);
-  })[0];
-}
-
 async function autoAssignConsultation(consultId) {
   if (!consultId) return { assigned: false, reason: "missing-consult-id" };
 
@@ -197,16 +183,14 @@ async function autoAssignConsultation(consultId) {
       .doc(linkedRoomId ?? discoveredRoomId ?? consultId);
     const reusableRoomSnap = await transaction.get(reusableRoomRef);
 
-    const counselors = counselorSnap.docs
-      .map((counselorDoc) => ({
-        id: counselorDoc.id,
-        ...counselorDoc.data(),
-      }))
-      .filter(
-        (counselor) =>
-          counselor.disabled !== true && counselor.autoAssignmentEnabled !== false
-      );
-    const counselor = chooseAutoAssignmentCounselor(counselors);
+    const counselors = counselorSnap.docs.map((counselorDoc) => ({
+      id: counselorDoc.id,
+      ...counselorDoc.data(),
+    }));
+    const counselor = chooseRoundRobinCounselor(
+      counselors,
+      settingsSnap.data()?.lastCounselorId
+    );
 
     if (!counselor) {
       return { assigned: false, reason: "no-counselor" };
@@ -314,6 +298,12 @@ async function autoAssignConsultation(consultId) {
       assignedOpenCount: admin.firestore.FieldValue.increment(1),
       lastAutoAssignedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    transaction.set(
+      settingsRef,
+      { lastCounselorId: counselor.id },
+      { merge: true }
+    );
 
     return {
       assigned: true,

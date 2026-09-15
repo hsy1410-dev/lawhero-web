@@ -19,20 +19,18 @@ import {
   getPhoneNumber,
 } from "./consultation";
 import { sendPush } from "./sendPush";
+import {
+  chooseRoundRobinCounselor,
+  isAutoAssignableCounselor,
+} from "./assignmentPolicy.js";
+
+export { isAutoAssignableCounselor } from "./assignmentPolicy.js";
 
 export const AUTO_ASSIGNMENT_SETTINGS_REF = doc(
   db,
   "admin_settings",
   "auto_assignment"
 );
-
-export function isAutoAssignableCounselor(counselor) {
-  return (
-    counselor?.role === "counselor" &&
-    counselor?.disabled !== true &&
-    counselor?.autoAssignmentEnabled !== false
-  );
-}
 
 function timestampToMillis(value) {
   if (!value) return 0;
@@ -42,21 +40,6 @@ function timestampToMillis(value) {
 
   const seconds = value.seconds ?? value._seconds;
   return typeof seconds === "number" ? seconds * 1000 : 0;
-}
-
-function chooseCounselor(counselors) {
-  return [...counselors].sort((a, b) => {
-    const loadDifference =
-      Number(a.assignedOpenCount ?? 0) - Number(b.assignedOpenCount ?? 0);
-    if (loadDifference !== 0) return loadDifference;
-
-    const assignedTimeDifference =
-      timestampToMillis(a.lastAutoAssignedAt) -
-      timestampToMillis(b.lastAutoAssignedAt);
-    if (assignedTimeDifference !== 0) return assignedTimeDifference;
-
-    return a.id.localeCompare(b.id);
-  })[0];
 }
 
 function getLinkedRoomId(consultation) {
@@ -135,6 +118,8 @@ export async function assignWaitingConsultation({
   const requestRef = doc(db, "consult_requests", requestId);
   const newRoomRef = doc(collection(db, "chat_rooms"));
   const assignedAt = Timestamp.now();
+  const usesRoundRobin =
+    assignmentMode === "automatic" || assignmentMode === "bulk";
   const discoveredRoomId = getLinkedRoomId(request)
     ? null
     : await findRoomByRequestId(requestId);
@@ -158,19 +143,29 @@ export async function assignWaitingConsultation({
       "chat_rooms",
       linkedRoomId ?? discoveredRoomId ?? requestId
     );
-    const [counselorSnapshots, reusableRoomSnap] = await Promise.all([
+    const [counselorSnapshots, reusableRoomSnap, settingsSnap] = await Promise.all([
       Promise.all(
         candidates.map((candidate) =>
           transaction.get(doc(db, "users", candidate.id))
         )
       ),
       transaction.get(reusableRoomRef),
+      usesRoundRobin
+        ? transaction.get(AUTO_ASSIGNMENT_SETTINGS_REF)
+        : Promise.resolve(null),
     ]);
+    if (assignmentMode === "automatic" && settingsSnap.data()?.enabled !== true) {
+      return { assigned: false, reason: "mode-disabled" };
+    }
+
     const availableCounselors = counselorSnapshots
       .filter((snapshot) => snapshot.exists())
       .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }))
       .filter(isAutoAssignableCounselor);
-    const counselor = chooseCounselor(availableCounselors);
+    const counselor = chooseRoundRobinCounselor(
+      availableCounselors,
+      settingsSnap?.data()?.lastCounselorId
+    );
 
     if (!counselor) {
       return { assigned: false, reason: "no-counselor" };
@@ -279,6 +274,15 @@ export async function assignWaitingConsultation({
         ? { lastAutoAssignedAt: serverTimestamp() }
         : {}),
     });
+
+    if (usesRoundRobin) {
+      // 배정과 순서를 함께 저장해 동시 요청이나 재시도에도 차례를 지킨다.
+      transaction.set(
+        AUTO_ASSIGNMENT_SETTINGS_REF,
+        { lastCounselorId: counselor.id },
+        { merge: true }
+      );
+    }
 
     return {
       assigned: true,
