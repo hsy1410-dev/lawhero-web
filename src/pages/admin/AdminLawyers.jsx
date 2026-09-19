@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { auth } from "../../config/firebase";
 import MainLayout from "../../layouts/MainLayout";
+import { formatMatchCount, getMatchCount, parseMatchCount } from "../../utils/lawyerMatchCount";
 import "../../styles/adminLawyers.css";
 
 const REGIONS = [
@@ -29,6 +30,7 @@ const EMPTY_FORM = {
   office: "",
   careerSummary: "",
   contractAmount: "",
+  matchCount: "0",
   isActive: true,
 };
 
@@ -60,6 +62,78 @@ async function parseApiResponse(response) {
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || "요청을 처리하지 못했습니다.");
   return payload;
+}
+
+function MatchCountEditor({ lawyer, onSaved }) {
+  const [value, setValue] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const savingRef = useRef(false);
+
+  const saveCount = async (event) => {
+    event.preventDefault();
+    if (savingRef.current) return;
+    setMessage("");
+    setError("");
+    const count = parseMatchCount(value ?? getMatchCount(lawyer.matchCount));
+    if (count === null) {
+      setError("매칭 횟수는 0 이상의 정수로 입력해 주세요.");
+      return;
+    }
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const token = await getAdminToken();
+      const response = await fetch("/api/adminLawyers", {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: lawyer.id, matchCount: count }),
+      });
+      const payload = await parseApiResponse(response);
+      onSaved(lawyer.id, payload.matchCount);
+      setValue(null);
+      setMessage("저장했습니다. 유저에게 공개됩니다.");
+    } catch (saveError) {
+      setError(saveError.message || "매칭 횟수를 저장하지 못했습니다.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form className="lawyer-match-editor" onSubmit={saveCount}>
+      <label htmlFor={`match-count-${lawyer.id}`}>누적 매칭 횟수 · 유저 공개</label>
+      <div className="lawyer-match-editor-controls">
+        <div className="lawyer-money-input">
+          <input
+            id={`match-count-${lawyer.id}`}
+            type="number"
+            min="0"
+            max={Number.MAX_SAFE_INTEGER}
+            step="1"
+            required
+            value={value ?? String(getMatchCount(lawyer.matchCount))}
+            disabled={saving}
+            onChange={(event) => {
+              setValue(event.target.value);
+              setMessage("");
+              setError("");
+            }}
+          />
+          <b>회</b>
+        </div>
+        <button type="submit" disabled={saving}>{saving ? "저장 중..." : "횟수 저장"}</button>
+      </div>
+      <small>수동으로 매칭한 누적 횟수를 입력해 주세요.</small>
+      {error && <p className="lawyer-form-message error" role="alert">{error}</p>}
+      {message && <p className="lawyer-form-message success" role="status">{message}</p>}
+    </form>
+  );
 }
 
 export default function AdminLawyers() {
@@ -168,6 +242,12 @@ export default function AdminLawyers() {
       return;
     }
 
+    const matchCount = parseMatchCount(form.matchCount);
+    if (matchCount === null) {
+      setFormError("매칭 횟수는 0 이상의 정수로 입력해 주세요.");
+      return;
+    }
+
     setSaving(true);
     try {
       const token = await getAdminToken();
@@ -182,6 +262,7 @@ export default function AdminLawyers() {
           ...(editingLawyer ? { id: editingLawyer.id } : {}),
           ...form,
           contractAmount: amount,
+          matchCount,
           ...(imageDataUrl ? { imageDataUrl } : {}),
         }),
       });
@@ -205,6 +286,7 @@ export default function AdminLawyers() {
       office: lawyer.office,
       careerSummary: lawyer.careerSummary,
       contractAmount: String(lawyer.contractAmount ?? 0),
+      matchCount: String(getMatchCount(lawyer.matchCount)),
       isActive: lawyer.isActive !== false,
     });
     setPhotoFile(null);
@@ -241,6 +323,15 @@ export default function AdminLawyers() {
     }
   };
 
+  const handleMatchCountSaved = (id, matchCount) => {
+    setLawyers((previous) => previous.map((lawyer) =>
+      lawyer.id === id ? { ...lawyer, matchCount } : lawyer
+    ));
+    if (editingLawyer?.id === id) {
+      setForm((previous) => ({ ...previous, matchCount: String(matchCount) }));
+    }
+  };
+
   return (
     <MainLayout title="변호사 관리">
       <div className="lawyer-admin-page">
@@ -249,7 +340,7 @@ export default function AdminLawyers() {
             <div>
               <span className="lawyer-heading-kicker">LAWYER PROFILE</span>
               <h2>{editingLawyer ? "변호사 정보 수정" : "새 변호사 등록"}</h2>
-              <p>고객에게 보여줄 프로필과 내부 계약정보를 한 번에 등록합니다.</p>
+              <p>고객에게 보여줄 프로필·매칭 횟수와 내부 계약정보를 등록합니다.</p>
             </div>
             {editingLawyer && (
               <button type="button" className="lawyer-cancel-button" onClick={resetForm}>
@@ -338,6 +429,22 @@ export default function AdminLawyers() {
                     <b>원</b>
                   </div>
                   <small>관리자 전용 · 금액이 높은 순으로 검색 상단에 배치됩니다.</small>
+                </label>
+                <label className="lawyer-match-field">
+                  <span>누적 매칭 횟수</span>
+                  <div className="lawyer-money-input">
+                    <input
+                      type="number"
+                      min="0"
+                      max={Number.MAX_SAFE_INTEGER}
+                      step="1"
+                      required
+                      value={form.matchCount}
+                      onChange={(event) => setForm({ ...form, matchCount: event.target.value })}
+                    />
+                    <b>회</b>
+                  </div>
+                  <small>수동으로 매칭한 누적 횟수입니다. 유저에게 공개됩니다.</small>
                 </label>
               </div>
 
@@ -450,6 +557,11 @@ export default function AdminLawyers() {
                     <span className="lawyer-region-badge">{lawyer.region}</span>
                   </div>
                   <p className="lawyer-card-career">{lawyer.careerSummary}</p>
+                  <p className="lawyer-match-summary">누적 매칭 <strong>{formatMatchCount(lawyer.matchCount)}</strong></p>
+                  <MatchCountEditor
+                    lawyer={lawyer}
+                    onSaved={handleMatchCountSaved}
+                  />
                   <div className="lawyer-contract-box">
                     <span><b aria-hidden="true">🔒</b> 내부 계약금</span>
                     <strong>{formatWon(lawyer.contractAmount)}</strong>

@@ -19,6 +19,7 @@ import ChatRoom from "./pages/counselor/ChatRoom";
 import CommunityProfile from "./pages/community/CommunityProfile";
 // User
 import UserHome from "./pages/user/UserHome";
+import UserLawyers from "./pages/user/UserLawyers";
 
 // Community
 import CommunityList from "./pages/community/CommunityList";
@@ -72,6 +73,7 @@ const CounselorChatPage = withRole(
 );
 
 const User = withRole(UserHome, "user");
+const UserLawyersPage = withRole(UserLawyers, "user");
 
 const ExpertCommunityWrite = withRole(
   CommunityWrite,
@@ -233,6 +235,10 @@ useEffect(() => {
   <Route
     path="/home"
     element={<User user={user} role={role} />}
+  />
+  <Route
+    path="/lawyers"
+    element={<UserLawyersPage user={user} role={role} />}
   />
 
   {/* Community */}

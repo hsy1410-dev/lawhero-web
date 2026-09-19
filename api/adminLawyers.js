@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import admin from "firebase-admin";
+import { getMatchCount, parseMatchCount } from "../src/utils/lawyerMatchCount.js";
 
 const storageBucket =
   process.env.FIREBASE_STORAGE_BUCKET ||
@@ -67,8 +68,17 @@ function validateLawyerInput(body) {
     office: cleanText(body.office, "소속 사무실", 100),
     careerSummary: cleanText(body.careerSummary, "간단 경력", 500),
     contractAmount: parseContractAmount(body.contractAmount),
+    ...(body.matchCount !== undefined ? { matchCount: validateMatchCount(body.matchCount) } : {}),
     isActive: body.isActive !== false,
   };
+}
+
+function validateMatchCount(value) {
+  const count = parseMatchCount(value);
+  if (count === null) {
+    throw createHttpError(400, "매칭 횟수는 0 이상의 정수로 입력해 주세요.");
+  }
+  return count;
 }
 
 async function authenticateAdmin(req) {
@@ -109,6 +119,7 @@ function serializeLawyer(profileDoc, contractById) {
     region: profile.region ?? "",
     office: profile.office ?? "",
     careerSummary: profile.careerSummary ?? "",
+    matchCount: getMatchCount(profile.matchCount),
     photoUrl: profile.photoUrl ?? "",
     photoPath: profile.photoPath ?? "",
     isActive: profile.isActive !== false,
@@ -207,6 +218,7 @@ async function createLawyer(req, res, adminUid) {
       office: input.office,
       officeSearch: input.office.toLocaleLowerCase("ko"),
       careerSummary: input.careerSummary,
+      matchCount: input.matchCount ?? 0,
       photoUrl: uploadedPhoto.photoUrl,
       photoPath: uploadedPhoto.photoPath,
       isActive: input.isActive,
@@ -256,6 +268,7 @@ async function updateLawyer(req, res, adminUid) {
         office: input.office,
         officeSearch: input.office.toLocaleLowerCase("ko"),
         careerSummary: input.careerSummary,
+        ...(input.matchCount !== undefined ? { matchCount: input.matchCount } : {}),
         isActive: input.isActive,
         ...(uploadedPhoto ?? {}),
         updatedAt: now,
@@ -285,11 +298,21 @@ async function updateLawyer(req, res, adminUid) {
   }
 }
 
-async function setLawyerVisibility(req, res, adminUid) {
+async function patchLawyer(req, res, adminUid) {
   const body = parseBody(req);
   const lawyerId = cleanText(body.id, "변호사 ID", 200);
-  if (typeof body.isActive !== "boolean") {
-    throw createHttpError(400, "노출 상태를 확인해 주세요.");
+  const changes = {};
+  if (body.isActive !== undefined) {
+    if (typeof body.isActive !== "boolean") {
+      throw createHttpError(400, "노출 상태를 확인해 주세요.");
+    }
+    changes.isActive = body.isActive;
+  }
+  if (body.matchCount !== undefined) {
+    changes.matchCount = validateMatchCount(body.matchCount);
+  }
+  if (!Object.keys(changes).length) {
+    throw createHttpError(400, "변경할 노출 상태 또는 매칭 횟수를 입력해 주세요.");
   }
 
   const profileRef = db.collection("lawyers").doc(lawyerId);
@@ -297,11 +320,11 @@ async function setLawyerVisibility(req, res, adminUid) {
   if (!profileSnap.exists) throw createHttpError(404, "변호사 정보를 찾을 수 없습니다.");
 
   await profileRef.update({
-    isActive: body.isActive,
+    ...changes,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedBy: adminUid,
   });
-  return res.status(200).json({ id: lawyerId, isActive: body.isActive });
+  return res.status(200).json({ id: lawyerId, ...changes });
 }
 
 export default async function handler(req, res) {
@@ -313,7 +336,7 @@ export default async function handler(req, res) {
     if (req.method === "GET") return await listLawyers(res);
     if (req.method === "POST") return await createLawyer(req, res, adminUid);
     if (req.method === "PUT") return await updateLawyer(req, res, adminUid);
-    if (req.method === "PATCH") return await setLawyerVisibility(req, res, adminUid);
+    if (req.method === "PATCH") return await patchLawyer(req, res, adminUid);
 
     res.setHeader("Allow", "GET, POST, PUT, PATCH");
     return res.status(405).json({ error: "지원하지 않는 요청입니다." });

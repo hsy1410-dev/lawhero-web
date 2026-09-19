@@ -1,4 +1,5 @@
 import admin from "firebase-admin";
+import { getMatchCount } from "../src/utils/lawyerMatchCount.js";
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -25,7 +26,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+  res.setHeader("Cache-Control", "no-store");
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "GET") {
     res.setHeader("Allow", "GET");
@@ -65,6 +66,7 @@ export default async function handler(req, res) {
           region: profile.region ?? "",
           office: profile.office ?? "",
           careerSummary: profile.careerSummary ?? "",
+          matchCount: getMatchCount(profile.matchCount),
           photoUrl: profile.photoUrl ?? "",
           updatedAt: timestampToIso(profile.updatedAt),
           _contractAmount: contractById.get(profileDoc.id) ?? 0,
@@ -105,6 +107,7 @@ export default async function handler(req, res) {
         region: lawyer.region,
         office: lawyer.office,
         careerSummary: lawyer.careerSummary,
+        matchCount: lawyer.matchCount,
         photoUrl: lawyer.photoUrl,
         updatedAt: lawyer.updatedAt,
       }));

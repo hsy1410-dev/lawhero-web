@@ -123,6 +123,14 @@ console.log("🔥 Sidebar role:", role);
           </Link>
 
           <Link
+            className={isActive("/lawyers") ? "active" : ""}
+            to="/lawyers"
+            onClick={onClose}
+          >
+            ⚖️ 변호사 목록
+          </Link>
+
+          <Link
             className={isActive("/community") ? "active" : ""}
             to="/community"
             onClick={onClose}
