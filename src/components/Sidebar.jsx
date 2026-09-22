@@ -53,6 +53,13 @@ console.log("🔥 Sidebar role:", role);
       ⚖️ 변호사 관리
     </Link>
     <Link
+      className={isActive("/admin/lawyer-applications") ? "active" : ""}
+      to="/admin/lawyer-applications"
+      onClick={onClose}
+    >
+      ✅ 변호사 회원 승인
+    </Link>
+    <Link
       className={isActive("/admin/support") ? "active" : ""}
       to="/admin/support"
       onClick={onClose}

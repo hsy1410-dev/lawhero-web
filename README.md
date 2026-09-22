@@ -1,5 +1,7 @@
 # React + Vite
 
+변호사 회원 조회·승인 기능: [사용 방법과 서버 설정](docs/lawyer-applications.md).
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

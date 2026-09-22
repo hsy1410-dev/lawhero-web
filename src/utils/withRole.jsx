@@ -27,6 +27,11 @@ export function withRole(Component, requiredRoles) {
       return <div>Loading...</div>;
     }
 
+    const allowed = Array.isArray(requiredRoles)
+      ? requiredRoles.includes(role)
+      : role === requiredRoles;
+    if (!allowed) return null;
+
     return <Component {...props} />;
   };
 }

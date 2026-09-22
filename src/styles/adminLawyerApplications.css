@@ -1,0 +1,78 @@
+.lawyer-applications-page { max-width: 1440px; margin: 0 auto; color: var(--text); }
+.applications-heading, .applications-heading-actions, .application-detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.applications-heading { margin-bottom: 26px; }
+.applications-heading h1 { margin: 0; font-size: 28px; letter-spacing: -.04em; }
+.applications-heading p:not(.application-eyebrow) { color: var(--subtext); font-size: 14px; line-height: 1.6; }
+.application-eyebrow { color: var(--btn); font-size: 12px; font-weight: 700; margin: 0 0 8px; }
+.applications-heading-actions { align-items: center; flex-wrap: wrap; font-size: 13px; }
+.lawyer-applications-page a { color: var(--btn); }
+.lawyer-applications-page button:disabled { opacity: .5; cursor: not-allowed; }
+.lawyer-applications-page :is(button, input, textarea, a):focus-visible { outline: 3px solid var(--btn); outline-offset: 3px; }
+.lawyer-applications-page .application-secondary { background: var(--card-bg); color: var(--text); border: 1px solid var(--border); }
+.applications-toolbar { padding: 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--card-bg); margin-bottom: 22px; }
+.applications-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.applications-filters button { color: var(--subtext); background: var(--bg); border: 1px solid transparent; font-size: 13px; }
+.applications-filters button[aria-pressed="true"] { color: #fff; background: var(--btn); border-color: var(--btn); }
+.applications-filters b { margin-left: 5px; }
+.applications-search { display: flex; align-items: center; gap: 16px; margin-top: 16px; font-size: 13px; font-weight: 600; }
+.applications-search input { flex: 1; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--bg); font: inherit; }
+.applications-workspace { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 22px; align-items: start; }
+.applications-list, .application-detail { border: 1px solid var(--border); border-radius: 16px; background: var(--card-bg); overflow: hidden; }
+.applications-list > h2 { font-size: 16px; margin: 0; padding: 20px; border-bottom: 1px solid var(--border); }
+.applications-list > h2 span { font-size: 13px; color: var(--subtext); font-weight: 400; margin-left: 8px; }
+.applications-list ul { list-style: none; margin: 0; padding: 0; max-height: 950px; overflow-y: auto; }
+.applications-list li + li { border-top: 1px solid var(--border); }
+.application-list-item { display: block; width: 100%; text-align: left; padding: 20px; border-radius: 0; border-left: 3px solid transparent; background: transparent; color: var(--text); }
+.application-list-item:hover { background: var(--bg); }
+.application-list-item[aria-pressed="true"] { background: var(--bg); border-left-color: var(--btn); }
+.application-list-item > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.application-list-item strong { font-size: 16px; overflow-wrap: anywhere; }
+.application-list-item p { margin: 9px 0; font-size: 13px; color: var(--subtext); font-weight: 400; overflow-wrap: anywhere; }
+.application-list-item small { color: var(--subtext); font-size: 11px; font-weight: 400; }
+.application-status { flex-shrink: 0; font-size: 11px; font-weight: 700; border-radius: 30px; padding: 6px 9px; }
+.status-pending { color: #92400e; background: #fef3c7; }
+.status-approved { color: #166534; background: #dcfce7; }
+.status-rejected { color: #9f1239; background: #ffe4e6; }
+.status-draft { color: #475569; background: #e2e8f0; }
+.application-detail { padding: 28px; }
+.application-detail-heading h2 { margin: 0; font-size: 25px; }
+.application-detail-heading > div { min-width: 0; overflow-wrap: anywhere; }
+.application-section { border-top: 1px solid var(--border); padding-top: 22px; margin-top: 22px; }
+.application-section h3 { font-size: 16px; margin: 0 0 16px; }
+.application-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 24px; margin: 0; }
+.application-fields dt { color: var(--subtext); font-size: 12px; margin-bottom: 5px; }
+.application-fields dd { margin: 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
+.application-note { color: var(--subtext); font-size: 13px; line-height: 1.7; }
+.application-error, .application-warning, .application-success { padding: 12px 14px; border-radius: 8px; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.application-error { color: #9f1239; background: #fff1f2; }
+.application-warning { color: #92400e; background: #fffbeb; }
+.application-success { color: #166534; background: #f0fdf4; }
+.application-document { margin-top: 20px; }
+.application-document img { display: block; width: 100%; max-height: 560px; object-fit: contain; border: 1px solid var(--border); border-radius: 8px; }
+.application-check { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.6; margin: 16px 0; }
+.application-check input { margin-top: 4px; }
+.application-reason { display: block; font-size: 14px; margin: 24px 0 10px; }
+.application-reason span { color: var(--subtext); display: block; margin-top: 5px; font-size: 12px; }
+.application-review textarea { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 14px; line-height: 1.7; resize: vertical; background: var(--bg); color: var(--text); }
+.application-reject-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; }
+.application-reject-row small { color: var(--subtext); }
+.lawyer-applications-page .application-danger { color: #9f1239; background: #ffe4e6; border: 1px solid #fecdd3; }
+.application-empty { padding: 28px 20px; color: var(--subtext); font-size: 14px; line-height: 1.7; }
+.application-unselected { text-align: center; padding: 100px 20px; color: var(--subtext); }
+.application-unselected > span { font-size: 40px; color: var(--btn); }
+.application-unselected h2 { font-size: 18px; color: var(--text); }
+.application-unselected p { font-size: 14px; line-height: 1.7; }
+@media (max-width: 1100px) {
+  .applications-workspace { grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); }
+  .applications-heading { flex-direction: column; }
+  .application-fields { grid-template-columns: minmax(0, 1fr); }
+  .application-detail { padding: 22px; }
+}
+@media (max-width: 760px) {
+  .applications-workspace { grid-template-columns: minmax(0, 1fr); }
+  .applications-list ul { max-height: 360px; }
+  .applications-heading h1 { font-size: 24px; }
+  .applications-search { align-items: stretch; flex-direction: column; gap: 8px; }
+  .applications-filters button { padding: 9px 10px; }
+  .applications-toolbar { padding: 16px; }
+}
