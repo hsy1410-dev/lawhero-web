@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../config/firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -104,6 +104,14 @@ export default function Login() {
         >
           {loading ? "로그인 중..." : "로그인"}
         </button>
+
+        <Link
+          className="auth-link auth-navigation-link"
+          to="/forgot-password"
+          state={{ email }}
+        >
+          비밀번호를 잊으셨나요?
+        </Link>
 
         <div
           className="auth-link"

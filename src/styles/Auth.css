@@ -82,6 +82,42 @@
   background: var(--btn-hover);
 }
 
+.auth-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.auth-description {
+  margin: 0 0 24px;
+  color: var(--subtext);
+  font-size: 14px;
+  line-height: 1.7;
+  word-break: keep-all;
+}
+
+.auth-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.auth-message {
+  margin: 0 0 18px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.auth-message-error {
+  border-color: var(--primary);
+}
+
 /* -------------------------
    회원가입 링크
 -------------------------- */
@@ -96,6 +132,17 @@
 
 .auth-link:hover {
   text-decoration: underline;
+}
+
+.auth-navigation-link {
+  display: block;
+  text-decoration: none;
+}
+
+.auth-navigation-link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 
 /* -------------------------

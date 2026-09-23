@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 // Auth
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
 import Signup from "./pages/Signup";
 import AdminSupport from "./pages/admin/AdminSupport";
 // Admin
@@ -187,6 +188,7 @@ useEffect(() => {
   {/* Auth */}
   <Route path="/" element={<Login />} />
   <Route path="/login" element={<Login />} />
+  <Route path="/forgot-password" element={<ForgotPassword />} />
   <Route path="/signup" element={<Signup />} />
 <Route
   path="/auth/kakao/callback"
