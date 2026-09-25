@@ -26,6 +26,22 @@ export async function reviewLawyerApplication(uid, decision, reason = "") {
   return data;
 }
 
+export async function saveLawyerContract(uid, contractAmount) {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("관리자로 다시 로그인해 주세요.");
+  const response = await fetch("/api/adminLawyerApplications", {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ uid, contractAmount }),
+  });
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    throw new Error("계약금 저장 API에 연결하지 못했습니다. 배포 상태를 확인해 주세요.");
+  }
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "계약금을 저장하지 못했습니다.");
+  return data;
+}
+
 export function applicationError(error) {
   if (["functions/unavailable", "functions/internal", "functions/not-found"].includes(error.code)) {
     return "승인 서버에 연결하지 못했습니다. reviewLawyerApplication 함수 배포 상태와 네트워크를 확인해 주세요.";

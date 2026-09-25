@@ -428,6 +428,15 @@
   object-fit: cover;
 }
 
+.lawyer-photo-placeholder {
+  display: grid;
+  place-items: center;
+  min-height: 210px;
+  height: 100%;
+  color: #758399;
+  font-size: 52px;
+}
+
 .lawyer-card-photo > span {
   position: absolute;
   right: 8px;

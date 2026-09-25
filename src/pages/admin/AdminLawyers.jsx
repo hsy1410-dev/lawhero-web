@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { auth } from "../../config/firebase";
 import MainLayout from "../../layouts/MainLayout";
 import { formatMatchCount, getMatchCount, parseMatchCount } from "../../utils/lawyerMatchCount";
+import { MAX_CONTRACT_AMOUNT, parseContractAmount } from "../../utils/lawyerContractAmount";
 import "../../styles/adminLawyers.css";
 
 const REGIONS = [
@@ -236,9 +237,9 @@ export default function AdminLawyers() {
       return;
     }
 
-    const amount = Number(form.contractAmount);
-    if (!Number.isSafeInteger(amount) || amount < 0) {
-      setFormError("계약금은 0원 이상의 숫자로 입력해 주세요.");
+    const amount = parseContractAmount(form.contractAmount);
+    if (amount === null) {
+      setFormError("계약금은 0원 이상 1조원 이하의 정수로 입력해 주세요.");
       return;
     }
 
@@ -417,8 +418,8 @@ export default function AdminLawyers() {
                     <input
                       type="number"
                       min="0"
-                      max="1000000000000"
-                      step="10000"
+                      max={MAX_CONTRACT_AMOUNT}
+                      step="1"
                       value={form.contractAmount}
                       placeholder="0"
                       required
@@ -543,7 +544,7 @@ export default function AdminLawyers() {
               <article key={lawyer.id} className={`lawyer-card ${lawyer.isActive ? "" : "inactive"}`}>
                 <div className="lawyer-rank-badge">#{index + 1}</div>
                 <div className="lawyer-card-photo">
-                  <img src={lawyer.photoUrl} alt={`${lawyer.name} 변호사`} />
+                  {lawyer.photoUrl ? <img src={lawyer.photoUrl} alt={`${lawyer.name} 변호사`} /> : <div className="lawyer-photo-placeholder" aria-label="사진 미등록">⚖</div>}
                   <span className={lawyer.isActive ? "active" : "hidden"}>
                     {lawyer.isActive ? "노출 중" : "노출 중지"}
                   </span>

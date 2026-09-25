@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import admin from "firebase-admin";
 import { getMatchCount, parseMatchCount } from "../src/utils/lawyerMatchCount.js";
+import { parseContractAmount as parseAmount } from "../src/utils/lawyerContractAmount.js";
 
 const storageBucket =
   process.env.FIREBASE_STORAGE_BUCKET ||
@@ -54,8 +55,8 @@ function cleanText(value, label, maxLength) {
 }
 
 function parseContractAmount(value) {
-  const amount = Number(value);
-  if (!Number.isSafeInteger(amount) || amount < 0 || amount > 1_000_000_000_000) {
+  const amount = parseAmount(value);
+  if (amount === null) {
     throw createHttpError(400, "계약금은 0원 이상 1조원 이하의 숫자로 입력해 주세요.");
   }
   return amount;

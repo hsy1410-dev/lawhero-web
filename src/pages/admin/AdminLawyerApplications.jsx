@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import MainLayout from "../../layouts/MainLayout";
-import { applicationError, fetchLawyerApplications, reviewLawyerApplication } from "../../services/lawyerApplications";
+import { applicationError, fetchLawyerApplications, reviewLawyerApplication, saveLawyerContract } from "../../services/lawyerApplications";
+import { MAX_CONTRACT_AMOUNT, parseContractAmount } from "../../utils/lawyerContractAmount";
 import "../../styles/adminLawyerApplications.css";
 
 const STATUSES = { pending: "승인 대기", approved: "승인 완료", rejected: "반려", draft: "작성 중" };
@@ -62,6 +63,57 @@ function EvidenceDocument({ uid, evidence }) {
       </>}
     </div>
   );
+}
+
+function ContractEditor({ application, onSaved }) {
+  const [value, setValue] = useState(application.contractAmount === null ? "" : String(application.contractAmount));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const busy = useRef(false);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+
+  const save = async (event) => {
+    event.preventDefault();
+    if (busy.current) return;
+    const amount = parseContractAmount(value);
+    if (amount === null) {
+      setError("계약금은 0원 이상 1조원 이하의 정수로 입력해 주세요.");
+      return;
+    }
+    busy.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      await saveLawyerContract(application.uid, amount);
+      if (alive.current) onSaved(`${application.name}님의 계약금 ${amount.toLocaleString("ko-KR")}원을 저장했습니다. 고객 목록은 계약금이 높은 순으로 표시됩니다.`);
+    } catch (failure) {
+      if (alive.current) setError(applicationError(failure));
+    } finally {
+      busy.current = false;
+      if (alive.current) setSaving(false);
+    }
+  };
+
+  return <section className="application-section">
+    <h3>계약금 관리</h3>
+    <p className="application-note">계약금을 저장하면 고객 목록에 등록되며, 금액이 높은 순으로 표시됩니다. 계약금은 관리자에게만 표시됩니다.</p>
+    {application.profileExists && !application.profileActive && <p className="application-warning">현재 고객 목록 노출이 중지되어 있습니다. 계약금 저장 후에도 노출 상태는 유지됩니다.</p>}
+    <form className="application-contract-form" onSubmit={save}>
+      <label htmlFor="application-contract-amount">계약금 (원)</label>
+      <div className="application-contract-controls">
+        <input id="application-contract-amount" type="number" min="0" max={MAX_CONTRACT_AMOUNT} step="1" required
+          inputMode="numeric" value={value} disabled={saving} placeholder="계약금을 입력해 주세요"
+          onChange={(event) => { setValue(event.target.value); setError(""); }} />
+        <button type="submit" disabled={saving}>{saving ? "저장 중…" : "계약금 저장"}</button>
+      </div>
+      {error && <p className="application-error" role="alert">{error}</p>}
+    </form>
+    <p className="application-note">사진·지역·경력과 노출 상태는 <Link to="/admin/lawyers">변호사 프로필 관리</Link>에서 수정할 수 있습니다.</p>
+  </section>;
 }
 
 function ApplicationDetail({ uid, onReviewed, onRetry }) {
@@ -128,8 +180,9 @@ function ApplicationDetail({ uid, onReviewed, onRetry }) {
         ]} />
       </section>
       <section className="application-section">
-        <h3>휴대폰 본인인증</h3>
-        <p className={a.identity.matches ? "application-success" : "application-warning"}>
+        <h3>휴대폰 본인인증 (선택)</h3>
+        <p className="application-note">휴대폰 본인인증은 승인 필수 조건이 아닙니다. 가입 정보와 변호사 인증 자료를 확인해 주세요.</p>
+        <p className={a.identity.matches ? "application-success" : "application-note"}>
           {a.identity.matches ? "본인인증 완료 · 신청서의 이름과 휴대폰번호가 일치합니다." : a.identity.verified ? "본인인증 정보와 신청서가 일치하지 않습니다." : "본인인증이 완료되지 않았습니다."}
         </p>
         <Fields rows={[["인증된 이름", a.identity.name], ["인증된 휴대폰번호", a.identity.phone], ["본인인증 일시", date(a.identity.verifiedAt)]]} />
@@ -150,11 +203,12 @@ function ApplicationDetail({ uid, onReviewed, onRetry }) {
         <h3>최근 심사 결과</h3>
         <Fields rows={[["심사일", date(a.reviewedAt)], ["처리 관리자", a.reviewedBy], ["반려 사유", a.rejectionReason]]} />
       </section>}
+      {a.canEditContract && <ContractEditor application={a} onSaved={onReviewed} />}
       <section className="application-section application-review">
         <h3>신청 심사</h3>
         {a.status === "pending" ? <>
-          <p className="application-note">승인하면 앱과 웹의 변호사 회원 권한 및 인증 배지가 함께 반영됩니다.</p>
-          {!a.canApprove && <p className="application-warning">본인인증 정보 일치 여부와 증빙 제출 상태를 확인해 주세요. 승인 조건이 충족되지 않았습니다.</p>}
+          <p className="application-note">승인하면 앱과 웹의 변호사 회원 권한 및 인증 배지가 함께 반영됩니다. 승인 완료 후 이 화면에서 계약금을 입력할 수 있습니다.</p>
+          {!a.canApprove && <p className="application-warning">변호사 인증 자료의 제출 상태와 가입 정보 일치 여부를 확인해 주세요. 승인 조건이 충족되지 않았습니다.</p>}
           <label className="application-check"><input type="checkbox" checked={checked} disabled={Boolean(saving) || !a.canApprove} onChange={(event) => setChecked(event.target.checked)} />가입 정보와 변호사 인증 자료를 확인했습니다.</label>
           <button type="button" disabled={Boolean(saving) || !checked || !a.canApprove} onClick={() => review("approve")}>{saving === "approve" ? "승인 중…" : "변호사 회원 승인"}</button>
           <label className="application-reason" htmlFor="application-reason">반려 사유 <span>반려 시 필수 · 신청자에게 표시</span></label>

@@ -43,6 +43,9 @@
 .application-fields dt { color: var(--subtext); font-size: 12px; margin-bottom: 5px; }
 .application-fields dd { margin: 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
 .application-note { color: var(--subtext); font-size: 13px; line-height: 1.7; }
+.application-contract-form label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+.application-contract-controls { display: flex; flex-wrap: wrap; gap: 10px; }
+.application-contract-controls input { flex: 1 1 180px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; font: inherit; color: var(--text); background: var(--bg); }
 .application-error, .application-warning, .application-success { padding: 12px 14px; border-radius: 8px; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 .application-error { color: #9f1239; background: #fff1f2; }
 .application-warning { color: #92400e; background: #fffbeb; }
