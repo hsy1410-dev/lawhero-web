@@ -1,5 +1,5 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 
 // Auth
@@ -12,7 +12,9 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import ConsultationDetail from "./pages/admin/ConsultationDetail";
 import AdminNotice from "./pages/admin/AdminNotice";
 import Adminusers from "./pages/admin/users";
-import AdminLawyers from "./pages/admin/AdminLawyers";
+import CouponManagement from "./pages/CouponManagement";
+import LawyerChats from "./pages/LawyerChats";
+import LawyerChatRoom from "./pages/LawyerChatRoom";
 import AdminLawyerApplications from "./pages/admin/AdminLawyerApplications";
 // Counselor
 import CounselorDashboard from "./pages/counselor/CounselorDashboard";
@@ -53,10 +55,11 @@ const AdminCounselorsPage = withRole(
   AdminCounselors,
   "admin"
 );
-const AdminLawyersPage = withRole(
-  AdminLawyers,
-  "admin"
-);
+const AdminUsersPage = withRole(Adminusers, "admin");
+const AdminCouponsPage = withRole(CouponManagement, "admin");
+const CounselorCouponsPage = withRole(CouponManagement, "counselor");
+const LawyerChatsPage = withRole(LawyerChats, ["user", "lawyer"]);
+const LawyerChatPage = withRole(LawyerChatRoom, ["user", "lawyer"]);
 const AdminLawyerApplicationsPage = withRole(AdminLawyerApplications, "admin");
 const AdminSupportPage = withRole(
   AdminSupport,
@@ -80,7 +83,7 @@ const UserLawyersPage = withRole(UserLawyers, "user");
 
 const ExpertCommunityWrite = withRole(
   CommunityWrite,
-  "expert"
+  ["expert", "lawyer", "admin"]
 );
 
 function App() {
@@ -211,10 +214,11 @@ useEffect(() => {
     path="/admin/notice"
     element={<AdminNoticePage user={user} role={role} />}
   />
-  <Route path="/admin/users" element={<Adminusers user={user} role={role}/>}/>
+  <Route path="/admin/users" element={<AdminUsersPage user={user} role={role}/>}/>
+  <Route path="/admin/coupons" element={<AdminCouponsPage user={user} role={role}/>}/>
   <Route
     path="/admin/lawyers"
-    element={<AdminLawyersPage user={user} role={role} />}
+    element={<Navigate to="/admin/users?role=expert" replace />}
   />
   <Route
     path="/admin/lawyer-applications"
@@ -226,6 +230,10 @@ useEffect(() => {
 />
 
   {/* Counselor */}
+  <Route path="/counselor/coupons" element={<CounselorCouponsPage user={user} role={role} />} />
+  <Route path="/lawyer/chats" element={<LawyerChatsPage user={user} role={role} />} />
+  <Route path="/chats" element={<LawyerChatsPage user={user} role={role} />} />
+  <Route path="/chat/:id" element={<LawyerChatPage user={user} role={role} />} />
   <Route
     path="/counselor/dashboard"
     element={<Counselor user={user} role={role} />}

@@ -25,7 +25,7 @@ function timestampToIso(value) {
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Cache-Control", "no-store");
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "GET") {
@@ -68,6 +68,8 @@ export default async function handler(req, res) {
           careerSummary: profile.careerSummary ?? "",
           matchCount: getMatchCount(profile.matchCount),
           photoUrl: profile.photoUrl ?? "",
+          _accountUid: profile.applicantUid || profile.uid || profile.userId || profileDoc.id,
+          _active: profile.active !== false,
           updatedAt: timestampToIso(profile.updatedAt),
           _contractAmount: contractById.get(profileDoc.id) ?? 0,
         };
@@ -99,9 +101,12 @@ export default async function handler(req, res) {
     const totalPages = Math.ceil(totalCount / pageSize);
     const currentPage = Math.min(page, Math.max(totalPages, 1));
     const startIndex = (currentPage - 1) * pageSize;
-    const lawyers = matchedLawyers
-      .slice(startIndex, startIndex + pageSize)
-      .map((lawyer) => ({
+    const pageProfiles = matchedLawyers.slice(startIndex, startIndex + pageSize);
+    const accounts = pageProfiles.length ? await db.getAll(...pageProfiles.flatMap((profile) => [
+      db.doc(`users/${profile._accountUid}`), db.doc(`app_users/${profile._accountUid}`), db.doc(`lawyer_badges/${profile._accountUid}`),
+    ])) : [];
+    const lawyers = pageProfiles
+      .map((lawyer, index) => ({
         id: lawyer.id,
         name: lawyer.name,
         region: lawyer.region,
@@ -110,6 +115,10 @@ export default async function handler(req, res) {
         matchCount: lawyer.matchCount,
         photoUrl: lawyer.photoUrl,
         updatedAt: lawyer.updatedAt,
+        canMatch: lawyer._active && accounts[index * 3]?.data()?.role === "lawyer"
+          && accounts[index * 3 + 1]?.data()?.role === "lawyer"
+          && accounts[index * 3 + 1]?.data()?.lawyerStatus === "approved"
+          && accounts[index * 3 + 2]?.data()?.approved === true,
       }));
 
     return res.status(200).json({
@@ -123,6 +132,7 @@ export default async function handler(req, res) {
       },
     });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message, code: error.code });
     console.error("변호사 검색 API 오류:", error);
     return res.status(500).json({ error: "변호사 목록을 불러오지 못했습니다." });
   }

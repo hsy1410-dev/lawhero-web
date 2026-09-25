@@ -32,6 +32,6 @@ export function withRole(Component, requiredRoles) {
       : role === requiredRoles;
     if (!allowed) return null;
 
-    return <Component {...props} />;
+    return <Component user={user} role={role} {...props} />;
   };
 }

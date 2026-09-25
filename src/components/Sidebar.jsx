@@ -46,11 +46,11 @@ console.log("🔥 Sidebar role:", role);
       ⭐ 상담사 관리
     </Link>
     <Link
-      className={isActive("/admin/lawyers") ? "active" : ""}
-      to="/admin/lawyers"
+      className={isActive("/admin/coupons") ? "active" : ""}
+      to="/admin/coupons"
       onClick={onClose}
     >
-      ⚖️ 변호사 관리
+      🎟️ 상담사 쿠폰 관리
     </Link>
     <Link
       className={isActive("/admin/lawyer-applications") ? "active" : ""}
@@ -80,6 +80,7 @@ console.log("🔥 Sidebar role:", role);
       {/* ===================== 상담사 ===================== */}
       {role === "counselor" && (
         <>
+          <Link to="/counselor/coupons" className={isActive("/counselor/coupons") ? "active" : ""} onClick={onClose}>🎟️ 쿠폰 지급·현황</Link>
           <Link
             className={isActive("/counselor/dashboard") ? "active" : ""}
             to="/counselor/dashboard"
@@ -99,7 +100,8 @@ console.log("🔥 Sidebar role:", role);
       )}
 
       {/* ===================== 전문가 ===================== */}
-      {(role === "expert" || role === "admin") && (
+      {role === "lawyer" && <Link to="/lawyer/chats" className={isActive("/lawyer/chats") ? "active" : ""} onClick={onClose}>💬 의뢰인 채팅</Link>}
+      {(["expert", "lawyer", "admin"].includes(role)) && (
   <>
     <Link
       className={isActive("/community") ? "active" : ""}
@@ -121,6 +123,7 @@ console.log("🔥 Sidebar role:", role);
       {/* ===================== 일반 사용자 ===================== */}
       {role === "user" && (
         <>
+          <Link to="/chats" className={isActive("/chats") ? "active" : ""} onClick={onClose}>💬 변호사 채팅</Link>
           <Link
             className={isActive("/home") ? "active" : ""}
             to="/home"

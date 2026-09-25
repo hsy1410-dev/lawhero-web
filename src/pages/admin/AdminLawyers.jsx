@@ -26,6 +26,7 @@ const REGIONS = [
 ];
 
 const EMPTY_FORM = {
+  accountUid: "",
   name: "",
   region: "",
   office: "",
@@ -137,7 +138,7 @@ function MatchCountEditor({ lawyer, onSaved }) {
   );
 }
 
-export default function AdminLawyers() {
+export default function AdminLawyers({ embedded = false }) {
   const [lawyers, setLawyers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -282,6 +283,7 @@ export default function AdminLawyers() {
   const startEditing = (lawyer) => {
     setEditingLawyer(lawyer);
     setForm({
+      accountUid: lawyer.accountUid || "",
       name: lawyer.name,
       region: lawyer.region,
       office: lawyer.office,
@@ -333,8 +335,7 @@ export default function AdminLawyers() {
     }
   };
 
-  return (
-    <MainLayout title="변호사 관리">
+  const content = (
       <div className="lawyer-admin-page">
         <section className="lawyer-form-section" ref={formSectionRef}>
           <header className="lawyer-section-heading">
@@ -351,6 +352,11 @@ export default function AdminLawyers() {
           </header>
 
           <form className="lawyer-form" onSubmit={handleSubmit}>
+            <label>채팅할 변호사 회원 UID
+              <input value={form.accountUid} maxLength={128} onChange={(event) => setForm((previous) => ({ ...previous, accountUid: event.target.value }))}
+                placeholder="승인된 변호사 회원의 UID" />
+              <small>전문가·변호사 회원 목록의 UID를 연결하면 직접 매칭과 채팅이 가능합니다.</small>
+            </label>
             <div className="lawyer-photo-field">
               <div className={`lawyer-photo-preview ${photoPreview ? "has-photo" : ""}`}>
                 {photoPreview ? (
@@ -590,6 +596,6 @@ export default function AdminLawyers() {
           </div>
         </section>
       </div>
-    </MainLayout>
   );
+  return embedded ? content : <MainLayout title="변호사 관리">{content}</MainLayout>;
 }

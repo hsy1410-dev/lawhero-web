@@ -54,6 +54,10 @@ export default function Login() {
           nav("/community");
           break;
 
+        case "lawyer":
+          nav("/lawyer/chats");
+          break;
+
         case "user":
         default:
           nav("/home");

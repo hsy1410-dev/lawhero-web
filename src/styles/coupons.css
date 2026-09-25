@@ -1,0 +1,34 @@
+.coupon-page { max-width: 1120px; margin: 0 auto; color: #20304a; }
+.coupon-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; }
+.coupon-page h2, .coupon-page h3 { margin: 0 0 10px; }
+.coupon-page p { color: #63718a; line-height: 1.6; }
+.coupon-page button, .lawyer-action { border: 0; border-radius: 8px; background: #315de0; color: white; padding: 12px 18px; cursor: pointer; font: inherit; }
+.coupon-page button:disabled, .lawyer-action:disabled { opacity: .5; cursor: not-allowed; }
+.coupon-page input:not([type=radio]), .coupon-page select { border: 1px solid #ccd5e4; border-radius: 8px; background: white; padding: 12px; color: #20304a; font: inherit; width: 100%; box-sizing: border-box; }
+.coupon-field { display: flex; flex-direction: column; gap: 8px; font-weight: 600; }
+.coupon-stats { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 12px; margin: 24px 0; }
+.coupon-stats > div, .coupon-panel { background: white; border: 1px solid #dde4ee; border-radius: 12px; padding: 22px; }
+.coupon-stats span { color: #64748b; font-size: 14px; }
+.coupon-stats strong { display: block; font-size: 30px; margin-top: 14px; color: #254eb9; }
+.coupon-stats small { font-size: 14px; margin-left: 6px; }
+.coupon-panel { margin: 18px 0; }
+.coupon-search, .coupon-issue { display: flex; align-items: end; flex-wrap: wrap; gap: 14px; }
+.coupon-search .coupon-field { flex: 1; min-width: 180px; }
+.coupon-issue p { width: 100%; margin-bottom: 0; }
+.coupon-recipients { display: grid; gap: 10px; margin-top: 16px; }
+.coupon-recipients label { display: flex; align-items: center; gap: 12px; padding: 12px; background: #f5f7fb; border-radius: 8px; overflow-wrap: anywhere; }
+.coupon-recipients small, .coupon-page td small { display: block; margin-top: 5px; font-size: 12px; color: #64748b; }
+.coupon-table-wrap { overflow-x: auto; }
+.coupon-page table { border-collapse: collapse; width: 100%; text-align: left; white-space: nowrap; }
+.coupon-page th, .coupon-page td { padding: 14px 12px; border-bottom: 1px solid #e6ebf2; }
+.coupon-page .coupon-error { color: #a92424; background: #fff0f0; padding: 14px; border-radius: 8px; }
+.coupon-page .coupon-success { color: #126240; background: #eaf8f1; padding: 14px; border-radius: 8px; }
+.lawyer-room-list { display: grid; gap: 12px; margin: 20px 0; }
+.lawyer-room-link { display: flex; justify-content: space-between; gap: 15px; padding: 22px; background: white; border: 1px solid #dbe3ee; border-radius: 12px; text-decoration: none; color: #20304a; }
+.lawyer-room-link p { margin: 8px 0 0; overflow-wrap: anywhere; }
+.coupon-required-dialog { width: min(420px, calc(100vw - 48px)); box-sizing: border-box; border: 1px solid #dbe3ee; border-radius: 16px; padding: 28px; color: #20304a; }
+.coupon-required-dialog::backdrop { background: #17243a80; }
+.coupon-required-dialog h2 { font-size: 21px; margin: 0 0 16px; }
+.coupon-required-dialog p { line-height: 1.8; color: #63718a; }
+.coupon-required-dialog form { text-align: right; margin-top: 24px; }
+@media (max-width: 600px) { .coupon-heading { align-items: start; flex-direction: column; } .coupon-panel { padding: 16px; } }

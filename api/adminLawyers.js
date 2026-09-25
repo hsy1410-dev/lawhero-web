@@ -116,6 +116,7 @@ function serializeLawyer(profileDoc, contractById) {
 
   return {
     id: profileDoc.id,
+    accountUid: profile.applicantUid || profile.uid || profile.userId || "",
     name: profile.name ?? "",
     region: profile.region ?? "",
     office: profile.office ?? "",
@@ -128,6 +129,21 @@ function serializeLawyer(profileDoc, contractById) {
     createdAt: timestampToIso(profile.createdAt),
     updatedAt: timestampToIso(profile.updatedAt),
   };
+}
+
+async function validateAccountLink(body, previous = {}) {
+  if (body.accountUid === undefined) return {};
+  const uid = typeof body.accountUid === "string" ? body.accountUid.trim() : "";
+  if (previous.applicantUid && uid !== previous.applicantUid) {
+    throw createHttpError(400, "가입 승인으로 생성한 프로필은 다른 회원에게 연결할 수 없습니다.");
+  }
+  if (!uid) return { uid: "", userId: "" };
+  if (!/^[\w-]{1,128}$/.test(uid)) throw createHttpError(400, "회원 UID를 확인해 주세요.");
+  const [account, appAccount, badge] = await db.getAll(db.doc(`users/${uid}`), db.doc(`app_users/${uid}`), db.doc(`lawyer_badges/${uid}`));
+  if (account.data()?.role !== "lawyer" || appAccount.data()?.role !== "lawyer" || appAccount.data()?.lawyerStatus !== "approved" || badge.data()?.approved !== true) {
+    throw createHttpError(400, "승인된 변호사 회원의 UID를 입력해 주세요.");
+  }
+  return { uid };
 }
 
 async function uploadPhoto(lawyerId, dataUrl) {
@@ -202,6 +218,7 @@ async function listLawyers(res) {
 async function createLawyer(req, res, adminUid) {
   const body = parseBody(req);
   const input = validateLawyerInput(body);
+  const accountLink = await validateAccountLink(body);
   const profileRef = db.collection("lawyers").doc();
   const contractRef = db.collection("lawyer_contracts").doc(profileRef.id);
   let uploadedPhoto = null;
@@ -212,6 +229,7 @@ async function createLawyer(req, res, adminUid) {
     const batch = db.batch();
 
     batch.set(profileRef, {
+      ...accountLink,
       name: input.name,
       nameSearch: input.name.toLocaleLowerCase("ko"),
       region: input.region,
@@ -252,6 +270,7 @@ async function updateLawyer(req, res, adminUid) {
   if (!profileSnap.exists) throw createHttpError(404, "변호사 정보를 찾을 수 없습니다.");
 
   const previousProfile = profileSnap.data();
+  const accountLink = await validateAccountLink(body, previousProfile);
   let uploadedPhoto = null;
 
   try {
@@ -262,6 +281,7 @@ async function updateLawyer(req, res, adminUid) {
     batch.set(
       profileRef,
       {
+        ...accountLink,
         name: input.name,
         nameSearch: input.name.toLocaleLowerCase("ko"),
         region: input.region,

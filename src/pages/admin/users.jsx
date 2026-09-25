@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import AdminLawyers from "./AdminLawyers";
 import {
   collection,
   query,
@@ -14,12 +16,24 @@ import MainLayout from "../../layouts/MainLayout";
 import "../../styles/adminUsers.css";
 
 export default function AdminUsers({ role }) {
+  const [params, setParams] = useSearchParams();
   const [staffUsers, setStaffUsers] = useState([]);
   const [appUsers, setAppUsers] = useState([]);
-  const [selectedStaffRole, setSelectedStaffRole] = useState("admin");
+  const selectedStaffRole = ["admin", "counselor", "expert", "user"].includes(params.get("role")) ? params.get("role") : "admin";
   const [selectedAppUsers, setSelectedAppUsers] = useState([]);
   const [searchApp, setSearchApp] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const request = selectedStaffRole === "user" ? collection(db, "users") : query(collection(db, "users"),
+      where("role", selectedStaffRole === "expert" ? "in" : "==", selectedStaffRole === "expert" ? ["expert", "lawyer"] : selectedStaffRole));
+    getDocs(request).then((snap) => {
+      if (active) setStaffUsers(snap.docs.map((entry) => ({ ...entry.data(), id: entry.id, role: entry.data().role || "user" }))
+        .filter((entry) => selectedStaffRole === "expert" ? ["expert", "lawyer"].includes(entry.role) : entry.role === selectedStaffRole));
+    }).catch(() => { if (active) alert("유저 목록을 불러오지 못했습니다."); });
+    return () => { active = false; };
+  }, [selectedStaffRole]);
 
   if (role !== "admin") {
     return <div>접근 권한이 없습니다.</div>;
@@ -44,33 +58,9 @@ export default function AdminUsers({ role }) {
     }
   };
 
-  const loadStaffUsersByRole = async (targetRole) => {
-    setSelectedStaffRole(targetRole);
-    setLoading(true);
-
-    try {
-      const snap =
-        targetRole === "user"
-          ? await getDocs(collection(db, "users"))
-          : await getDocs(
-              query(collection(db, "users"), where("role", "==", targetRole))
-            );
-
-      const results = snap.docs
-        .map((staffDoc) => ({
-          id: staffDoc.id,
-          ...staffDoc.data(),
-          role: staffDoc.data().role || "user",
-        }))
-        .filter((user) => user.role === targetRole);
-
-      setStaffUsers(results);
-    } catch (error) {
-      console.error(error);
-      alert("유저 검색 실패");
-    } finally {
-      setLoading(false);
-    }
+  const loadStaffUsersByRole = (targetRole) => {
+    setStaffUsers([]);
+    setParams({ role: targetRole });
   };
 
   const loadCoupons = async (userDoc) => {
@@ -91,7 +81,7 @@ export default function AdminUsers({ role }) {
     setLoading(true);
     try {
       const snap = await getDocs(collection(db, "app_users"));
-      setAppUsers(snap.docs.map((userDoc) => ({ id: userDoc.id, ...userDoc.data() })));
+      setAppUsers(await Promise.all(snap.docs.map(loadCoupons)));
       setSelectedAppUsers([]);
     } catch (error) {
       console.error(error);
@@ -220,14 +210,15 @@ export default function AdminUsers({ role }) {
   const roleLabelMap = {
     admin: "관리자",
     counselor: "상담사",
-    expert: "전문가",
+    expert: "전문가·변호사",
+    lawyer: "변호사",
     user: "유저",
   };
 
   const staffRoleButtons = [
     { value: "admin", label: "관리자" },
     { value: "counselor", label: "상담사" },
-    { value: "expert", label: "전문가" },
+    { value: "expert", label: "전문가·변호사" },
     { value: "user", label: "유저" },
   ];
 
@@ -237,7 +228,7 @@ export default function AdminUsers({ role }) {
         {loading && <div className="admin-loading">정보를 불러오는 중...</div>}
 
         <section className="admin-users-section">
-          <h2>관리자·상담사·전문가 권한</h2>
+          <h2>관리자·상담사·전문가 회원 관리</h2>
           <div className="role-filter-row">
             {staffRoleButtons.map((roleOption) => (
               <button
@@ -261,14 +252,17 @@ export default function AdminUsers({ role }) {
                 <strong>{user.name || user.realName || "이름 없음"}</strong>
                 <span>{user.email || "이메일 없음"}</span>
                 <small>UID: {user.id}</small>
-                <p>현재 권한: <strong>{user.role || "user"}</strong></p>
+                <p>현재 권한: <strong>{roleLabelMap[user.role] || user.role}</strong></p>
+                {user.role === "lawyer" && <Link to="/admin/lawyer-applications">변호사 승인·계약금 관리</Link>}
+                {user.role === "counselor" && <Link to={`/admin/coupons?counselor=${encodeURIComponent(user.id)}`}>쿠폰 지급·사용 현황</Link>}
 
                 <div className="management-actions">
-                  <select value={user.role ?? ""} onChange={(event) => changeRole(user.id, event.target.value)}>
+                  <select aria-label={`${user.name || user.id} 권한`} value={user.role ?? ""} onChange={(event) => changeRole(user.id, event.target.value)}>
                     <option value="">권한 선택</option>
                     <option value="admin">admin</option>
                     <option value="counselor">counselor</option>
                     <option value="expert">expert</option>
+                    {user.role === "lawyer" && <option value="lawyer">lawyer (승인 변호사)</option>}
                     <option value="user">user</option>
                   </select>
 
@@ -280,6 +274,13 @@ export default function AdminUsers({ role }) {
             ))}
           </div>
         </section>
+
+        {selectedStaffRole === "expert" && <section className="admin-users-section">
+          <div className="section-heading-row"><div><h2>변호사 프로필·매칭 관리</h2>
+            <p>전문가와 변호사 회원을 함께 관리합니다. 변호사 자격은 회원 승인 절차로 부여됩니다.</p></div>
+            <Link to="/admin/lawyer-applications">변호사 회원 승인</Link></div>
+          <AdminLawyers embedded />
+        </section>}
 
         <section className="admin-users-section customer-section">
           <div className="section-heading-row">
@@ -352,8 +353,9 @@ export default function AdminUsers({ role }) {
                             {coupon.type === "consult_support" && "상담지원 쿠폰"}
                             {coupon.type === "lawyer_fee_30" && "선임료 30% 지원"}
                             {coupon.type === "lawyer_fee_50" && "선임료 50% 지원"}
+                            {coupon.used ? " · 사용 완료" : " · 미사용"}
                           </span>
-                          <button type="button" onClick={() => deductCoupon(user.id, coupon.id)}>차감</button>
+                          {coupon.type !== "consult_support" && <button type="button" onClick={() => deductCoupon(user.id, coupon.id)}>차감</button>}
                         </div>
                       ))}
                     </div>
