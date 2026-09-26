@@ -1,5 +1,6 @@
 import admin from "firebase-admin";
 import { parseContractAmount } from "../src/utils/lawyerContractAmount.js";
+import { isActiveProfile, isDeletedProfile } from "../server/lawyerDirectory.js";
 
 const DOCUMENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 
@@ -116,7 +117,8 @@ function detail(uid, { account, application, identity, contract, profile }) {
     canEditContract: application.status === "approved" && account.role === "lawyer",
     contractAmount: parseContractAmount(contract?.contractAmount),
     profileExists: profile?.applicantUid === uid,
-    profileActive: profile?.applicantUid === uid && profile.isActive === true,
+    profileActive: profile?.applicantUid === uid && isActiveProfile(profile),
+    profileDeleted: Boolean(profile && isDeletedProfile(profile)),
     // CI and private storage paths never leave this endpoint.
   };
 }

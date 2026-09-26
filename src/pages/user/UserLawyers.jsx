@@ -27,6 +27,12 @@ export default function UserLawyers({ user }) {
   const pagination = result.data?.pagination;
 
   useEffect(() => {
+    const refresh = () => { if (document.visibilityState !== "hidden") setRequest((previous) => ({ ...previous })); };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, []);
+
+  useEffect(() => {
     if (couponRequired) couponDialog.current?.showModal();
   }, [couponRequired]);
 

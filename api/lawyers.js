@@ -1,5 +1,6 @@
 import admin from "firebase-admin";
 import { getMatchCount } from "../src/utils/lawyerMatchCount.js";
+import { directoryAccount, isActiveProfile, readDirectoryAccounts } from "../server/lawyerDirectory.js";
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -47,7 +48,7 @@ export default async function handler(req, res) {
     const pageSize = 10;
 
     const [profileSnap, contractSnap] = await Promise.all([
-      db.collection("lawyers").where("isActive", "==", true).get(),
+      db.collection("lawyers").get(),
       db.collection("lawyer_contracts").get(),
     ]);
     const contractById = new Map(
@@ -57,7 +58,12 @@ export default async function handler(req, res) {
       ])
     );
 
+    const accounts = await readDirectoryAccounts(db, profileSnap.docs);
     const matchedLawyers = profileSnap.docs
+      .filter((entry) => {
+        const account = directoryAccount(entry, accounts);
+        return isActiveProfile(entry.data()) && account.exists;
+      })
       .map((profileDoc) => {
         const profile = profileDoc.data();
         return {
@@ -68,8 +74,7 @@ export default async function handler(req, res) {
           careerSummary: profile.careerSummary ?? "",
           matchCount: getMatchCount(profile.matchCount),
           photoUrl: profile.photoUrl ?? "",
-          _accountUid: profile.applicantUid || profile.uid || profile.userId || profileDoc.id,
-          _active: profile.active !== false,
+          canMatch: directoryAccount(profileDoc, accounts).approved,
           updatedAt: timestampToIso(profile.updatedAt),
           _contractAmount: contractById.get(profileDoc.id) ?? 0,
         };
@@ -102,11 +107,8 @@ export default async function handler(req, res) {
     const currentPage = Math.min(page, Math.max(totalPages, 1));
     const startIndex = (currentPage - 1) * pageSize;
     const pageProfiles = matchedLawyers.slice(startIndex, startIndex + pageSize);
-    const accounts = pageProfiles.length ? await db.getAll(...pageProfiles.flatMap((profile) => [
-      db.doc(`users/${profile._accountUid}`), db.doc(`app_users/${profile._accountUid}`), db.doc(`lawyer_badges/${profile._accountUid}`),
-    ])) : [];
     const lawyers = pageProfiles
-      .map((lawyer, index) => ({
+      .map((lawyer) => ({
         id: lawyer.id,
         name: lawyer.name,
         region: lawyer.region,
@@ -115,10 +117,7 @@ export default async function handler(req, res) {
         matchCount: lawyer.matchCount,
         photoUrl: lawyer.photoUrl,
         updatedAt: lawyer.updatedAt,
-        canMatch: lawyer._active && accounts[index * 3]?.data()?.role === "lawyer"
-          && accounts[index * 3 + 1]?.data()?.role === "lawyer"
-          && accounts[index * 3 + 1]?.data()?.lawyerStatus === "approved"
-          && accounts[index * 3 + 2]?.data()?.approved === true,
+        canMatch: lawyer.canMatch,
       }));
 
     return res.status(200).json({

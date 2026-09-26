@@ -1,0 +1,7 @@
+.lawyer-evidence { margin-top: 12px; min-width: 0; }
+.lawyer-evidence button { padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; color: #1e3a5f; cursor: pointer; }
+.lawyer-evidence button:disabled { cursor: wait; opacity: .6; }
+.lawyer-evidence img { display: block; max-width: 100%; max-height: 420px; object-fit: contain; margin-top: 10px; border-radius: 6px; }
+.lawyer-evidence a { color: #1d4ed8; }
+.lawyer-evidence-note { color: #64748b; font-size: 12px; line-height: 1.6; }
+.lawyer-evidence-error { color: #b91c1c; font-size: 13px; }

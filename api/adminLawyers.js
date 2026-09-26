@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import admin from "firebase-admin";
 import { getMatchCount, parseMatchCount } from "../src/utils/lawyerMatchCount.js";
 import { parseContractAmount as parseAmount } from "../src/utils/lawyerContractAmount.js";
+import { directoryAccount, isActiveProfile, isDeletedProfile, readDirectoryAccounts } from "../server/lawyerDirectory.js";
 
 const storageBucket =
   process.env.FIREBASE_STORAGE_BUCKET ||
@@ -110,13 +111,13 @@ function timestampToIso(value) {
   return null;
 }
 
-function serializeLawyer(profileDoc, contractById) {
+function serializeLawyer(profileDoc, contractById, account) {
   const profile = profileDoc.data();
   const contract = contractById.get(profileDoc.id) ?? {};
 
   return {
     id: profileDoc.id,
-    accountUid: profile.applicantUid || profile.uid || profile.userId || "",
+    accountUid: account.uid,
     name: profile.name ?? "",
     region: profile.region ?? "",
     office: profile.office ?? "",
@@ -124,7 +125,7 @@ function serializeLawyer(profileDoc, contractById) {
     matchCount: getMatchCount(profile.matchCount),
     photoUrl: profile.photoUrl ?? "",
     photoPath: profile.photoPath ?? "",
-    isActive: profile.isActive !== false,
+    isActive: isActiveProfile(profile),
     contractAmount: Number(contract.contractAmount ?? 0),
     createdAt: timestampToIso(profile.createdAt),
     updatedAt: timestampToIso(profile.updatedAt),
@@ -143,7 +144,7 @@ async function validateAccountLink(body, previous = {}) {
   if (account.data()?.role !== "lawyer" || appAccount.data()?.role !== "lawyer" || appAccount.data()?.lawyerStatus !== "approved" || badge.data()?.approved !== true) {
     throw createHttpError(400, "승인된 변호사 회원의 UID를 입력해 주세요.");
   }
-  return { uid };
+  return { uid, userId: "" };
 }
 
 async function uploadPhoto(lawyerId, dataUrl) {
@@ -204,8 +205,10 @@ async function listLawyers(res) {
   const contractById = new Map(
     contractSnap.docs.map((contractDoc) => [contractDoc.id, contractDoc.data()])
   );
+  const accounts = await readDirectoryAccounts(db, profileSnap.docs);
   const lawyers = profileSnap.docs
-    .map((profileDoc) => serializeLawyer(profileDoc, contractById))
+    .filter((entry) => !isDeletedProfile(entry.data()) && directoryAccount(entry, accounts).exists)
+    .map((profileDoc) => serializeLawyer(profileDoc, contractById, directoryAccount(profileDoc, accounts)))
     .sort((a, b) => {
       const amountDifference = b.contractAmount - a.contractAmount;
       if (amountDifference !== 0) return amountDifference;
@@ -267,7 +270,7 @@ async function updateLawyer(req, res, adminUid) {
   const profileRef = db.collection("lawyers").doc(lawyerId);
   const contractRef = db.collection("lawyer_contracts").doc(lawyerId);
   const profileSnap = await profileRef.get();
-  if (!profileSnap.exists) throw createHttpError(404, "변호사 정보를 찾을 수 없습니다.");
+  if (!profileSnap.exists || isDeletedProfile(profileSnap.data())) throw createHttpError(404, "변호사 정보를 찾을 수 없습니다.");
 
   const previousProfile = profileSnap.data();
   const accountLink = await validateAccountLink(body, previousProfile);
@@ -276,37 +279,41 @@ async function updateLawyer(req, res, adminUid) {
   try {
     if (body.imageDataUrl) uploadedPhoto = await uploadPhoto(lawyerId, body.imageDataUrl);
     const now = admin.firestore.FieldValue.serverTimestamp();
-    const batch = db.batch();
-
-    batch.set(
-      profileRef,
-      {
-        ...accountLink,
-        name: input.name,
-        nameSearch: input.name.toLocaleLowerCase("ko"),
-        region: input.region,
-        regionSearch: input.region.toLocaleLowerCase("ko"),
-        office: input.office,
-        officeSearch: input.office.toLocaleLowerCase("ko"),
-        careerSummary: input.careerSummary,
-        ...(input.matchCount !== undefined ? { matchCount: input.matchCount } : {}),
-        isActive: input.isActive,
-        ...(uploadedPhoto ?? {}),
-        updatedAt: now,
-      },
-      { merge: true }
-    );
-    batch.set(
-      contractRef,
-      {
-        lawyerId,
-        contractAmount: input.contractAmount,
-        updatedAt: now,
-        updatedBy: adminUid,
-      },
-      { merge: true }
-    );
-    await batch.commit();
+    await db.runTransaction(async (tx) => {
+      const latest = await tx.get(profileRef);
+      if (!latest.exists || isDeletedProfile(latest.data())) {
+        throw createHttpError(404, "변호사 정보를 찾을 수 없습니다.");
+      }
+      tx.set(
+        profileRef,
+        {
+          ...accountLink,
+          name: input.name,
+          nameSearch: input.name.toLocaleLowerCase("ko"),
+          region: input.region,
+          regionSearch: input.region.toLocaleLowerCase("ko"),
+          office: input.office,
+          officeSearch: input.office.toLocaleLowerCase("ko"),
+          careerSummary: input.careerSummary,
+          ...(input.matchCount !== undefined ? { matchCount: input.matchCount } : {}),
+          isActive: input.isActive,
+          active: input.isActive,
+          ...(uploadedPhoto ?? {}),
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+      tx.set(
+        contractRef,
+        {
+          lawyerId,
+          contractAmount: input.contractAmount,
+          updatedAt: now,
+          updatedBy: adminUid,
+        },
+        { merge: true }
+      );
+    });
 
     if (uploadedPhoto && previousProfile.photoPath !== uploadedPhoto.photoPath) {
       await removePhoto(previousProfile.photoPath);
@@ -328,6 +335,7 @@ async function patchLawyer(req, res, adminUid) {
       throw createHttpError(400, "노출 상태를 확인해 주세요.");
     }
     changes.isActive = body.isActive;
+    changes.active = body.isActive;
   }
   if (body.matchCount !== undefined) {
     changes.matchCount = validateMatchCount(body.matchCount);
@@ -337,15 +345,34 @@ async function patchLawyer(req, res, adminUid) {
   }
 
   const profileRef = db.collection("lawyers").doc(lawyerId);
-  const profileSnap = await profileRef.get();
-  if (!profileSnap.exists) throw createHttpError(404, "변호사 정보를 찾을 수 없습니다.");
-
-  await profileRef.update({
-    ...changes,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedBy: adminUid,
+  await db.runTransaction(async (tx) => {
+    const profileSnap = await tx.get(profileRef);
+    if (!profileSnap.exists || isDeletedProfile(profileSnap.data())) throw createHttpError(404, "변호사 정보를 찾을 수 없습니다.");
+    tx.set(profileRef, {
+      ...changes,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: adminUid,
+    }, { merge: true });
   });
   return res.status(200).json({ id: lawyerId, ...changes });
+}
+
+async function deleteLawyer(req, res, adminUid) {
+  const lawyerId = cleanText(parseBody(req).id, "변호사 ID", 200);
+  if (/[/\\]/.test(lawyerId) || [".", ".."].includes(lawyerId)) {
+    throw createHttpError(400, "변호사 ID를 확인해 주세요.");
+  }
+  const profileRef = db.collection("lawyers").doc(lawyerId);
+  const profileSnap = await profileRef.get();
+  if (!profileSnap.exists) throw createHttpError(404, "변호사 정보를 찾을 수 없습니다.");
+  // Preserve contracts and consultation history. A tombstone prevents a later
+  // contract save from recreating a deleted directory entry.
+  await profileRef.update({
+    isActive: false, active: false,
+    deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+    deletedBy: adminUid, updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return res.status(200).json({ id: lawyerId, message: "변호사 프로필을 삭제했습니다." });
 }
 
 export default async function handler(req, res) {
@@ -358,8 +385,9 @@ export default async function handler(req, res) {
     if (req.method === "POST") return await createLawyer(req, res, adminUid);
     if (req.method === "PUT") return await updateLawyer(req, res, adminUid);
     if (req.method === "PATCH") return await patchLawyer(req, res, adminUid);
+    if (req.method === "DELETE") return await deleteLawyer(req, res, adminUid);
 
-    res.setHeader("Allow", "GET, POST, PUT, PATCH");
+    res.setHeader("Allow", "GET, POST, PUT, PATCH, DELETE");
     return res.status(405).json({ error: "지원하지 않는 요청입니다." });
   } catch (error) {
     const status = Number(error.status) || 500;

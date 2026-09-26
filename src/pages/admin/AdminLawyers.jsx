@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { auth } from "../../config/firebase";
 import MainLayout from "../../layouts/MainLayout";
+import LawyerEvidence from "../../components/LawyerEvidence";
 import { formatMatchCount, getMatchCount, parseMatchCount } from "../../utils/lawyerMatchCount";
 import { MAX_CONTRACT_AMOUNT, parseContractAmount } from "../../utils/lawyerContractAmount";
 import "../../styles/adminLawyers.css";
@@ -138,7 +139,7 @@ function MatchCountEditor({ lawyer, onSaved }) {
   );
 }
 
-export default function AdminLawyers({ embedded = false }) {
+export default function AdminLawyers({ embedded = false, refreshKey = 0 }) {
   const [lawyers, setLawyers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -154,8 +155,12 @@ export default function AdminLawyers({ embedded = false }) {
   const [searchOffice, setSearchOffice] = useState("");
   const [updatingId, setUpdatingId] = useState("");
   const formSectionRef = useRef(null);
+  const loadRequestRef = useRef(0);
+  const actionRef = useRef(false);
+  const cancelLoads = useCallback(() => { loadRequestRef.current += 1; }, []);
 
-  const loadLawyers = async () => {
+  const loadLawyers = useCallback(async () => {
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
     setLoadError("");
     try {
@@ -165,18 +170,21 @@ export default function AdminLawyers({ embedded = false }) {
         cache: "no-store",
       });
       const payload = await parseApiResponse(response);
-      setLawyers(Array.isArray(payload.lawyers) ? payload.lawyers : []);
+      if (requestId === loadRequestRef.current) setLawyers(Array.isArray(payload.lawyers) ? payload.lawyers : []);
     } catch (error) {
       console.error("변호사 목록 조회 실패:", error);
-      setLoadError(error.message || "변호사 목록을 불러오지 못했습니다.");
+      if (requestId === loadRequestRef.current) setLoadError(error.message || "변호사 목록을 불러오지 못했습니다.");
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadLawyers();
-  }, []);
+    const refresh = () => { if (document.visibilityState !== "hidden") loadLawyers(); };
+    window.addEventListener("focus", refresh);
+    return () => { cancelLoads(); window.removeEventListener("focus", refresh); };
+  }, [loadLawyers, refreshKey, cancelLoads]);
 
   useEffect(() => {
     if (!photoFile) return undefined;
@@ -300,6 +308,8 @@ export default function AdminLawyers({ embedded = false }) {
   };
 
   const toggleVisibility = async (lawyer) => {
+    if (actionRef.current) return;
+    actionRef.current = true;
     setUpdatingId(lawyer.id);
     setLoadError("");
     try {
@@ -322,6 +332,33 @@ export default function AdminLawyers({ embedded = false }) {
       console.error("변호사 노출 상태 변경 실패:", error);
       setLoadError(error.message || "노출 상태를 변경하지 못했습니다.");
     } finally {
+      actionRef.current = false;
+      setUpdatingId("");
+    }
+  };
+
+  const deleteLawyer = async (lawyer) => {
+    if (actionRef.current || !window.confirm(`${lawyer.name} 변호사의 프로필을 삭제하시겠습니까? 앱·웹 검색과 관리 목록에서 사라지며, 기존 상담 기록과 회원 계정은 유지됩니다.`)) return;
+    actionRef.current = true;
+    setUpdatingId(lawyer.id);
+    setLoadError("");
+    try {
+      const token = await getAdminToken();
+      const response = await fetch("/api/adminLawyers", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ id: lawyer.id }),
+      });
+      await parseApiResponse(response);
+      ++loadRequestRef.current;
+      setLoading(false);
+      setLawyers((previous) => previous.filter((item) => item.id !== lawyer.id));
+      if (editingLawyer?.id === lawyer.id) resetForm();
+      setSuccessMessage("변호사 프로필을 삭제했습니다.");
+    } catch (error) {
+      setLoadError(error.message || "변호사 프로필을 삭제하지 못했습니다.");
+    } finally {
+      actionRef.current = false;
       setUpdatingId("");
     }
   };
@@ -506,6 +543,7 @@ export default function AdminLawyers({ embedded = false }) {
               <p>계약금이 높은 순서로 표시됩니다. 계약금은 이 관리자 화면에서만 보입니다.</p>
             </div>
             {!loading && !loadError && <strong className="lawyer-total-count">총 {lawyers.length}명</strong>}
+            <button type="button" onClick={loadLawyers} disabled={loading || Boolean(updatingId)}>새로고침</button>
           </header>
 
           <div className="lawyer-search-bar" role="search">
@@ -564,6 +602,7 @@ export default function AdminLawyers({ embedded = false }) {
                     <span className="lawyer-region-badge">{lawyer.region}</span>
                   </div>
                   <p className="lawyer-card-career">{lawyer.careerSummary}</p>
+                  {lawyer.accountUid && <LawyerEvidence key={lawyer.accountUid} uid={lawyer.accountUid} />}
                   <p className="lawyer-match-summary">누적 매칭 <strong>{formatMatchCount(lawyer.matchCount)}</strong></p>
                   <MatchCountEditor
                     lawyer={lawyer}
@@ -574,13 +613,13 @@ export default function AdminLawyers({ embedded = false }) {
                     <strong>{formatWon(lawyer.contractAmount)}</strong>
                   </div>
                   <div className="lawyer-card-actions">
-                    <button type="button" className="lawyer-edit-button" onClick={() => startEditing(lawyer)}>
+                    <button type="button" className="lawyer-edit-button" disabled={saving || Boolean(updatingId)} onClick={() => startEditing(lawyer)}>
                       정보 수정
                     </button>
                     <button
                       type="button"
                       className="lawyer-visibility-button"
-                      disabled={updatingId === lawyer.id}
+                      disabled={saving || Boolean(updatingId)}
                       onClick={() => toggleVisibility(lawyer)}
                     >
                       {updatingId === lawyer.id
@@ -588,6 +627,9 @@ export default function AdminLawyers({ embedded = false }) {
                         : lawyer.isActive
                           ? "노출 중지"
                           : "다시 노출"}
+                    </button>
+                    <button type="button" className="lawyer-delete-button" disabled={saving || Boolean(updatingId)} onClick={() => deleteLawyer(lawyer)}>
+                      프로필 삭제
                     </button>
                   </div>
                 </div>

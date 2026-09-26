@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import MainLayout from "../../layouts/MainLayout";
+import LawyerEvidence from "../../components/LawyerEvidence";
 import { applicationError, fetchLawyerApplications, reviewLawyerApplication, saveLawyerContract } from "../../services/lawyerApplications";
 import { MAX_CONTRACT_AMOUNT, parseContractAmount } from "../../utils/lawyerContractAmount";
 import "../../styles/adminLawyerApplications.css";
@@ -20,49 +21,6 @@ function Fields({ rows }) {
   return <dl className="application-fields">{rows.map(([label, value]) => (
     <div key={label}><dt>{label}</dt><dd>{value === null || value === undefined || value === "" ? "—" : value}</dd></div>
   ))}</dl>;
-}
-
-function EvidenceDocument({ uid, evidence }) {
-  const [document, setDocument] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const alive = useRef(true);
-  const busy = useRef(false);
-  useEffect(() => {
-    alive.current = true;
-    return () => { alive.current = false; };
-  }, []);
-  const openDocument = async () => {
-    if (busy.current) return;
-    busy.current = true;
-    setLoading(true);
-    setError("");
-    try {
-      const data = await fetchLawyerApplications({ uid, document: "1" });
-      if (alive.current) setDocument(data);
-    } catch (failure) {
-      if (alive.current) setError(applicationError(failure));
-    } finally {
-      busy.current = false;
-      if (alive.current) setLoading(false);
-    }
-  };
-  if (!evidence.hasDocument) {
-    return <p className="application-note">{evidence.method === "bar_id" ? "번호 제출 방식입니다. 등록번호와 발급번호를 확인한 후 수동으로 심사해 주세요." : "첨부된 증빙 파일이 없습니다."}</p>;
-  }
-  return (
-    <div className="application-document">
-      <button type="button" className="application-secondary" onClick={openDocument} disabled={loading}>
-        {loading ? "증빙 불러오는 중…" : document ? "증빙 링크 새로고침" : "첨부 증빙 확인"}
-      </button>
-      {error && <p className="application-error" role="alert">{error}</p>}
-      {document && <>
-        <p><a href={document.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{document.contentType === "application/pdf" ? "PDF 원본 열기" : "이미지 원본 열기"} ↗</a></p>
-        <p className="application-note">열람 링크는 5분간 유효합니다. 만료되면 새로고침해 주세요.</p>
-        {document.contentType.startsWith("image/") && <img src={document.url} alt="신청자가 제출한 변호사 인증 증빙" referrerPolicy="no-referrer" onError={() => setError("증빙을 표시하지 못했습니다. 링크를 새로고침해 주세요.")} />}
-      </>}
-    </div>
-  );
 }
 
 function ContractEditor({ application, onSaved }) {
@@ -101,7 +59,8 @@ function ContractEditor({ application, onSaved }) {
   return <section className="application-section">
     <h3>계약금 관리</h3>
     <p className="application-note">계약금을 저장하면 고객 목록에 등록되며, 금액이 높은 순으로 표시됩니다. 계약금은 관리자에게만 표시됩니다.</p>
-    {application.profileExists && !application.profileActive && <p className="application-warning">현재 고객 목록 노출이 중지되어 있습니다. 계약금 저장 후에도 노출 상태는 유지됩니다.</p>}
+    {application.profileDeleted && <p className="application-warning">삭제된 프로필입니다. 계약금을 저장해도 고객 검색에 다시 표시되지 않습니다.</p>}
+    {application.profileExists && !application.profileDeleted && !application.profileActive && <p className="application-warning">현재 고객 목록 노출이 중지되어 있습니다. 계약금 저장 후에도 노출 상태는 유지됩니다.</p>}
     <form className="application-contract-form" onSubmit={save}>
       <label htmlFor="application-contract-amount">계약금 (원)</label>
       <div className="application-contract-controls">
@@ -196,7 +155,7 @@ function ApplicationDetail({ uid, onReviewed, onRetry }) {
               ["증빙 성명", e.name], ["자격 상태", e.qualificationStatus], ["증빙 사무소", e.office], ["사무소 소재지", e.officeAddress], ["발급일", e.issuedDate],
             ] : [["등록번호", e.registrationNumber], ["발급번호", e.issueNumber], ...(e.method === "lawyer_id" ? [["증빙 성명", e.name], ["증빙 생년월일", e.birthDate]] : [])]),
           ]} />
-          <EvidenceDocument uid={uid} evidence={e} />
+          <LawyerEvidence key={uid} uid={uid} evidence={e} />
         </> : <p className="application-note">아직 변호사 인증 자료를 제출하지 않았습니다.</p>}
       </section>
       {(a.reviewedAt || a.rejectionReason) && <section className="application-section">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import AdminLawyers from "./AdminLawyers";
+import LawyerEvidence from "../../components/LawyerEvidence";
 import {
   collection,
   query,
@@ -23,6 +24,7 @@ export default function AdminUsers({ role }) {
   const [selectedAppUsers, setSelectedAppUsers] = useState([]);
   const [searchApp, setSearchApp] = useState("");
   const [loading, setLoading] = useState(false);
+  const [lawyerRefreshKey, setLawyerRefreshKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -118,6 +120,7 @@ export default function AdminUsers({ role }) {
   const changeRole = async (uid, newRole) => {
     try {
       await updateDoc(doc(db, "users", uid), { role: newRole });
+      setLawyerRefreshKey((value) => value + 1);
       setStaffUsers((prev) => prev.filter((user) => user.id !== uid));
       alert("권한이 변경되었습니다.");
     } catch (error) {
@@ -131,6 +134,7 @@ export default function AdminUsers({ role }) {
 
     try {
       await deleteDoc(doc(db, "users", uid));
+      setLawyerRefreshKey((value) => value + 1);
       setStaffUsers((prev) => prev.filter((user) => user.id !== uid));
     } catch (error) {
       console.error(error);
@@ -159,6 +163,7 @@ export default function AdminUsers({ role }) {
 
     try {
       await deleteAppUserRecords([uid]);
+      setLawyerRefreshKey((value) => value + 1);
       setAppUsers((prev) => prev.filter((user) => user.id !== uid));
       setSelectedAppUsers((prev) => prev.filter((id) => id !== uid));
     } catch (error) {
@@ -180,6 +185,7 @@ export default function AdminUsers({ role }) {
     setLoading(true);
     try {
       await deleteAppUserRecords(selectedAppUsers);
+      setLawyerRefreshKey((value) => value + 1);
       const deletedIds = new Set(selectedAppUsers);
       setAppUsers((prev) => prev.filter((user) => !deletedIds.has(user.id)));
       setSelectedAppUsers([]);
@@ -254,6 +260,7 @@ export default function AdminUsers({ role }) {
                 <small>UID: {user.id}</small>
                 <p>현재 권한: <strong>{roleLabelMap[user.role] || user.role}</strong></p>
                 {user.role === "lawyer" && <Link to="/admin/lawyer-applications">변호사 승인·계약금 관리</Link>}
+                {(user.role === "lawyer" || user.lawyerApplicant) && <LawyerEvidence key={user.id} uid={user.id} />}
                 {user.role === "counselor" && <Link to={`/admin/coupons?counselor=${encodeURIComponent(user.id)}`}>쿠폰 지급·사용 현황</Link>}
 
                 <div className="management-actions">
@@ -279,7 +286,7 @@ export default function AdminUsers({ role }) {
           <div className="section-heading-row"><div><h2>변호사 프로필·매칭 관리</h2>
             <p>전문가와 변호사 회원을 함께 관리합니다. 변호사 자격은 회원 승인 절차로 부여됩니다.</p></div>
             <Link to="/admin/lawyer-applications">변호사 회원 승인</Link></div>
-          <AdminLawyers embedded />
+          <AdminLawyers embedded refreshKey={lawyerRefreshKey} />
         </section>}
 
         <section className="admin-users-section customer-section">

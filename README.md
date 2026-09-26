@@ -1,6 +1,7 @@
 # React + Vite
 
 변호사 회원 조회·승인 기능: [사용 방법과 서버 설정](docs/lawyer-applications.md).
+전문가 통합·쿠폰 지급·직접 매칭·채팅: [사용 방법과 배포 안내](docs/coupons-and-matching.md).
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
